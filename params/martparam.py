@@ -1,21 +1,28 @@
 from argparse import Namespace, ArgumentParser
 from pathlib import Path
 
+from .attackparam import AttackParam
+from .dataparam import DataParam
+from .lrscheduleparam import LRScheduleParam
+from .optimparam import OptimParam
+from .trainparam import TrainParam
 
-class MARTParam():
+
+class MARTParam(DataParam, LRScheduleParam, OptimParam, TrainParam, AttackParam):
+
+    @staticmethod
+    def add_argument(parser: ArgumentParser) -> None:
+        DataParam.add_argument(parser)
+        LRScheduleParam.add_argument(parser)
+        OptimParam.add_argument(parser)
+        TrainParam.add_argument(parser)
+        AttackParam.add_argument(parser)
+        parser.add_argument("--beta", type=float)
+
     def __init__(self, args: Namespace) -> None:
-        self.batch_size = args.batch_size
-        self.test_batch_size = args.test_batch_size
-        self.epochs = args.epochs
-        self.weight_decay = args.weight_decay
-        self.lr = args.lr
-        self.momentum = args.momentum
-        self.no_cuda = args.no_cuda
-        self.epsilon = args.epsilon
-        self.num_steps = args.num_steps
-        self.step_size = args.step_size
-        self.beta = args.beta
-        self.seed = args.seed
-        self.log_interval = args.log_interval
-        self.model = args.model
-        self.save_freq = args.save_freq
+        super(DataParam,       self).__init__(args)
+        super(LRScheduleParam, self).__init__(args)
+        super(OptimParam,      self).__init__(args)
+        super(TrainParam,      self).__init__(args)
+        super(AttackParam,     self).__init__(args)
+        self.beta: float = float(args.beta)

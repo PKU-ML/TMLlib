@@ -22,3 +22,6 @@ class TrainParam():
         self.taskname: Path = Path(args.taskname)
         self.resume: bool = bool(args.resume)
         self.eval: bool = bool(args.eval)
+        
+        self.save_dir = Path("save_file") / self.taskname
+        self.log_file = self.save_dir / ('eval.log' if self.eval else 'train.log')

@@ -1,4 +1,3 @@
-import torch
 class BaseTrainer():
     def __init__(self, param) -> None:
         pass

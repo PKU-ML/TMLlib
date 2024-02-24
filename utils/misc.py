@@ -1,20 +1,14 @@
-'''
-Some helper functions for PyTorch, including:
-    - get_mean_and_std: calculate the mean and std value of dataset.
-    - msr_init: net parameter initialization.
-    - progress_bar: progress bar mimic xlua.progress.
-'''
 import errno
 import os
 import math
+import numpy as np
+import random
+
 
 import torch
 import torch.nn as nn
 import torch.utils.data
 import torch.nn.init as init
-
-__all__ = ['get_mean_and_std', 'init_params', 'mkdir_p', 'save_checkpoint', 'torch_accuracy', 'AverageMeter']
-
 
 def get_mean_and_std(dataset):
     '''Compute the mean and std value of dataset.'''
@@ -86,25 +80,25 @@ def torch_accuracy(output, target, topk=(1,)):
     return ans
 
 
-class AverageMeter(object):
-    name = 'No name'
+def set_all_seed(seed_num: int):
+    random.seed(seed_num)
+    np.random.seed(seed_num)
+    torch.manual_seed(seed_num)
+    torch.cuda.manual_seed(seed_num)
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.deterministic = True
 
-    def __init__(self, name='No name'):
-        self.name = name
-        self.reset()
 
-    def reset(self):
-        self.sum = 0
-        self.mean = 0
-        self.num = 0
-        self.now = 0
+def moving_average(net1, net2, decay_rate=0., update_bn=True):
+    for param1, param2 in zip(net1.parameters(), net2.parameters()):
+        param1.data *= decay_rate
+        param1.data += param2.data * (1 - decay_rate)
 
-    def update(self, mean_var, count=1):
-        if math.isnan(mean_var):
-            mean_var = 1e6
-            print('Avgmeter getting Nan!')
-        self.now = mean_var
-        self.num += count
-
-        self.sum += mean_var * count
-        self.mean = float(self.sum) / self.num
+    if update_bn:
+        for module1, module2 in zip(net1.modules(), net2.modules()):
+            if isinstance(module1, torch.nn.modules.batchnorm._BatchNorm):
+                module1.running_mean *= decay_rate
+                module1.running_mean += module2.running_mean * (1 - decay_rate)
+                module1.running_var *= decay_rate
+                module1.running_var += module2.running_var * (1 - decay_rate)
+                module1.num_batches_tracked = module2.num_batches_tracked
