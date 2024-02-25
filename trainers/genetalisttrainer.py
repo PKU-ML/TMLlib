@@ -59,9 +59,9 @@ class GeneralistTrainer():
 
         self.epoch = self.start_epoch
         self.criterion = nn.CrossEntropyLoss()
-        self.lr_schedule = LRSchedule(self.param)
+        self.lr_schedule = LRSchedule(param=self.param)
         self.criterion_ST = nn.CrossEntropyLoss()
-        self.adjust_beta = lambda t: np.interp([t], [0, self.param.epochs // 3, self.param.epochs * 2 // 3, self.param.epochs], [1.0, 1.0, 1.0, 0.4])[0]
+        self.beta_schedule = lambda t: np.interp(t, [0, self.param.epochs // 3, self.param.epochs * 2 // 3, self.param.epochs], [1.0, 1.0, 1.0, 0.4])
 
         self.logger.info('Epoch \t \t LR \t \t Train Loss \t Train Acc \t Train Robust Loss \t Train Robust Acc \t Test Loss \t Test Acc \t Test Robust Loss \t Test Robust Acc')
 
@@ -113,7 +113,7 @@ class GeneralistTrainer():
             self.teacher_ST.update_params(self.model_ST)
             self.teacher_ST.apply_shadow()
 
-            beta = self.adjust_beta(self.epoch + (i + 1) / len(self.train_dataloader))
+            beta = self.beta_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
             self.teacher_mixed.update_params(self.teacher_AT.model, self.teacher_ST.model, beta=beta)
             self.teacher_mixed.apply_shadow()
 
@@ -197,7 +197,3 @@ class GeneralistTrainer():
         for self.epoch in range(self.start_epoch, self.param.epochs):
             self.train_one_epoch()
             self.val_one_epoch()
-
-    def adjust_beta(self, t):
-        return np.interp([t], [0, self.param.epochs // 3, self.param.epochs * 2 // 3, self.param.epochs],
-                         [1.0, 1.0, 1.0, 0.4])[0]

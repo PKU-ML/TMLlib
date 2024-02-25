@@ -1,4 +1,4 @@
-# Default parameters for AWP
+# Default parameters for BaseAT
 
 # DataParam
 dataset: cifar10
@@ -39,7 +39,3 @@ delta_norm: l_inf
 cutmix: false
 cutmix_alpha: 0
 cutmix_beta: 0
-
-# AWPParam
-awp_gamma: 0.01
-awp_warmup: 0

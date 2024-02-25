@@ -163,4 +163,4 @@ cython_debug/
 .vscode
 playground
 save_file
-
+data

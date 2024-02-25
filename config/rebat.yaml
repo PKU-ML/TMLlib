@@ -1,1 +1,53 @@
-test: test
+# Default parameters for ReBAT
+
+# DataParam
+dataset: cifar10
+data_dir: ./data/cifar10
+batch_size: 128
+num_workers: 4
+num_classes: 10
+
+# TrainParam
+epochs: 200
+model: resnet
+seed: 1898
+save_freq: 10
+taskname: baseAT
+resume: false
+
+# OptimParam
+lr_max: 0.1
+weight_decay: 0.0005
+momentum: 0.9
+l1: 0.0
+l2: 0.0
+
+# LRScheduleParam
+lr_schedule: stage
+epoch_list: [0, 50, 75, 100]
+lr_list: [0.1, 0.01, 0.001]
+
+# AttackParam
+attack: pgd
+epsilon: 8
+step_size: 2
+num_steps: 10
+restarts: 1
+delta_norm: l_inf
+
+# CutmixParam
+cutmix: false
+cutmix_alpha: 0
+cutmix_beta: 0
+
+#ReBATParam
+decay_rate: 0.999
+warmup_epochs: 105
+stronger_attack: false
+stronger_epsilon: 10
+stronger_num_steps: 12
+stronger_eval: false
+use_reg_schedule: false
+boat_beta: 1.0
+boat_beta_factor: 1.5
+reg_schedule: dependent

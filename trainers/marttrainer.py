@@ -46,7 +46,7 @@ class MARTTrainer():
 
         self.epoch = self.start_epoch
         self.criterion = nn.CrossEntropyLoss()
-        self.lr_schedule = LRSchedule(self.param)
+        self.lr_schedule = LRSchedule(param=self.param)
 
         self.logger.info('Epoch \t \t LR \t \t Train Loss \t Train Acc \t Train Robust Loss \t Train Robust Acc \t Test Loss \t Test Acc \t Test Robust Loss \t Test Robust Acc')
 

@@ -54,7 +54,7 @@ class ReBATTrainer():
 
         self.epoch = self.start_epoch
         self.criterion = nn.CrossEntropyLoss()
-        self.lr_schedule = LRSchedule(self.param)
+        self.lr_schedule = LRSchedule(param=self.param)
         self.reg_scheduler = self.get_reg_schedule()
         self.attacker = AttackerPolymer(self.param.epsilon, self.param.num_steps, self.param.step_size, self.param.num_classes, device)
 
@@ -83,7 +83,7 @@ class ReBATTrainer():
             # attack
             self.model.eval()
             if self.param.attack == 'pgd':
-                if not self.param.stronger_attack or self.epoch < self.param.stage1:  # ReBAT[strong] # TODO
+                if not self.param.stronger_attack or self.lr_schedule.stage(self.epoch) < 1:  # ReBAT[strong] # TODO
                     if self.param.cutmix:
                         delta = attack_pgd(self.model, X, y, self.param.epsilon, self.param.step_size,
                                            self.param.num_steps, self.param.restarts, self.param.delta_norm,
@@ -213,10 +213,10 @@ class ReBATTrainer():
     def get_reg_schedule(self):  # TODO to be fixed
         if self.param.reg_schedule == 'piecewise':
             def reg_schedule(t):
-                if t < self.param.stage2:  # WA and BoAT regularization start after the first LR decay, usually at epoch 105
-                    return self.param.beta
+                if self.lr_schedule.stage(t) < 2:  # WA and BoAT regularization start after the first LR decay, usually at epoch 105
+                    return self.param.boat_beta
                 else:
-                    return self.param.beta * self.param.beta_factor
+                    return self.param.boat_beta * self.param.boat_beta_factor
         elif self.param.reg_schedule == 'dependent':
             def reg_schedule(t):
                 rate = self.lr_schedule(t)
