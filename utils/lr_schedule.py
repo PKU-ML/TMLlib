@@ -1,5 +1,5 @@
 import numpy as np
-from params import LRScheduleParam
+from params.lrscheduleparam import LRScheduleParam
 
 
 class LRSchedule():

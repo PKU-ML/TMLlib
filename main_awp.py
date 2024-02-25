@@ -1,8 +1,7 @@
 import os
 
-from utils.log import get_logger
 from utils.dataset import prepare_dataloader
-from utils.misc import set_all_seed
+from utils.misc import set_all_seed, get_logger
 from utils.args import get_args
 
 from trainers import AWPTrainer

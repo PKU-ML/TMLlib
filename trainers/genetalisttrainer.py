@@ -2,28 +2,26 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
+from logging import Logger
 import copy
-import numpy as np
 
 from params import GeneralistParam
 from models import get_model
-from logging import Logger
 
-from utils.attack import attack_pgd, AttackerPolymer
+from utils.attack import attack_pgd
 from utils.const import *
 from utils.tens import normalize
 from utils.lr_schedule import LRSchedule
+from utils.avg import AverageMeter
+from utils.mixup import *
+from utils.l1l2 import *
 from utils.ema import EMA
+from utils.avg import AverageMeter
 
 
 class GeneralistTrainer():
 
-    def adjust_beta(self, t):
-        return np.interp([t], [0, self.param.epochs // 3, self.param.epochs * 2 // 3, self.param.epochs],
-                         [1.0, 1.0, 1.0, 0.4])[0]
-
-    def __init__(self, param: GeneralistParam, train_dataloader: DataLoader, val_dataloader: DataLoader,
-                 logger: Logger) -> None:
+    def __init__(self, param: GeneralistParam, train_dataloader: DataLoader, val_dataloader: DataLoader, logger: Logger) -> None:
 
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
@@ -32,12 +30,13 @@ class GeneralistTrainer():
 
         self.model = get_model(self.param.model, num_classes=param.num_classes)
         # self.model = nn.DataParallel(self.model).cuda()
-        self.opt = torch.optim.SGD(self.model.parameters(), lr=self.param.lr_max,
-                                   momentum=0.9, weight_decay=self.param.weight_decay)
+        self.opt = torch.optim.SGD(get_l2(self.param.l2, self.model), lr=self.param.lr_max,
+                                   momentum=self.param.momentum, weight_decay=self.param.weight_decay)
 
         self.model_ST = get_model(self.param.model, num_classes=param.num_classes)
         # self.model_ST = nn.DataParallel(self.model_ST).cuda()
-        self.opt_ST = torch.optim.SGD(self.model_ST.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
+        self.opt_ST = torch.optim.SGD(self.model_ST.parameters(), lr=0.1,
+                                      momentum=0.9, weight_decay=5e-4)  # TODO opt_ST param?
 
         self.best_perf = -float('inf')
         self.current_perf = -float('inf')
@@ -60,39 +59,43 @@ class GeneralistTrainer():
 
         self.epoch = self.start_epoch
         self.criterion = nn.CrossEntropyLoss()
-        self.criterion_ST = nn.CrossEntropyLoss()
         self.lr_schedule = LRSchedule(self.param)
+        self.criterion_ST = nn.CrossEntropyLoss()
         self.adjust_beta = lambda t: np.interp([t], [0, self.param.epochs // 3, self.param.epochs * 2 // 3, self.param.epochs], [1.0, 1.0, 1.0, 0.4])[0]
 
         self.logger.info('Epoch \t \t LR \t \t Train Loss \t Train Acc \t Train Robust Loss \t Train Robust Acc \t Test Loss \t Test Acc \t Test Robust Loss \t Test Robust Acc')
 
     def train_one_epoch(self):
 
-        train_loss = 0
-        train_acc = 0
-        train_robust_loss = 0
-        train_robust_acc = 0
-        train_n = 0
+        train_loss = AverageMeter("train_loss")
+        train_acc = AverageMeter("train_acc")
+        train_robust_loss = AverageMeter("train_robust_loss")
+        train_robust_acc = AverageMeter("train_robust_acc")
 
         for i, (X, y) in enumerate(self.train_dataloader):
             X, y = X.cuda(), y.cuda()
-            lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
-            beta = self.adjust_beta(self.epoch + (i + 1) / len(self.train_dataloader))
+            lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))  # TODO lr_schedule is not correct
             self.opt.param_groups[0].update(lr=lr)
             self.opt.zero_grad()
 
+            # attack
+            self.model.eval()
             if self.param.attack == 'pgd':
-                delta = attack_pgd(self.model, X, y, self.param.epsilon, self.param.step_size, self.param.num_steps,
-                                   self.param.restarts, self.param.delta_norm)
-                delta = delta.detach()
+                delta = attack_pgd(self.model, X, y, self.param.epsilon, self.param.step_size,
+                                   self.param.num_steps, self.param.restarts, self.param.delta_norm)
             elif self.param.attack == 'none':
                 delta = torch.zeros_like(X)
+            else:
+                ValueError("Error attack type")
+            delta = delta.detach()
             X_adv = normalize(torch.clamp(X + delta[:X.size(0)], min=lower_limit, max=upper_limit))
 
+            # train
             self.model.train()
-            logit = self.model(X_adv)
-            loss_at = self.criterion(logit, y)
-            loss_at.backward()
+            robust_output = self.model(X_adv)
+            robust_loss = self.criterion(robust_output, y)
+            robust_loss += get_l1(self.param.l1, self.model)
+            robust_loss.backward()
             self.opt.step()
 
             self.teacher_AT.update_params(self.model)
@@ -110,7 +113,7 @@ class GeneralistTrainer():
             self.teacher_ST.update_params(self.model_ST)
             self.teacher_ST.apply_shadow()
 
-
+            beta = self.adjust_beta(self.epoch + (i + 1) / len(self.train_dataloader))
             self.teacher_mixed.update_params(self.teacher_AT.model, self.teacher_ST.model, beta=beta)
             self.teacher_mixed.apply_shadow()
 
@@ -118,58 +121,53 @@ class GeneralistTrainer():
                 self.model.load_state_dict(self.teacher_mixed.shadow)
                 self.model_ST.load_state_dict(self.teacher_mixed.shadow)
 
-            train_robust_loss += loss_at.item() * y.size(0)
-            train_robust_acc += (logit.max(1)[1] == y).sum().item()
-            train_loss += loss_st.item() * y.size(0)
-            train_acc += (nat_logit.max(1)[1] == y).sum().item()
-            train_n += y.size(0)
+            # log
+            train_robust_loss.update(robust_loss.item(), len(y))
+            train_robust_acc .update((robust_output.max(1)[1] == y).mean().item(), len(y))
+            train_loss.update(loss_st.item(), len(y))
+            train_acc.update((nat_logit.max(1)[1] == y).mean().item(), len(y))
 
-        self.logger.info('train \t %d \t \t %.4f ' +
-                         '\t %.4f \t %.4f \t %.4f \t \t %.4f',
-                         self.epoch, lr,
-                         train_loss / train_n, train_acc / train_n, train_robust_loss / train_n, train_robust_acc / train_n)
+        self.logger.info('train \t %d \t \t %.4f \t %.4f \t %.4f \t %.4f \t \t %.4f',
+                         self.epoch, lr, train_robust_loss.mean, train_robust_acc.mean, train_loss.mean, train_acc.mean)
 
     def val_one_epoch(self):
 
-        val_loss = 0
-        val_acc = 0
-        val_robust_loss = 0
-        val_robust_acc = 0
-        val_n = 0
+        val_loss = AverageMeter("val_loss")
+        val_acc = AverageMeter("val_acc")
+        val_robust_loss = AverageMeter("val_robust_loss")
+        val_robust_acc = AverageMeter("val_robust_acc")
 
         self.model.eval()
         for i, (X, y) in enumerate(self.val_dataloader):
             X, y = X.cuda(), y.cuda()
 
-            # Random initialization
-            if self.param.attack == 'none':
-                delta = torch.zeros_like(X)
-            else:
+            # attack
+            if self.param.attack == 'pgd':
                 delta = attack_pgd(self.model, X, y, self.param.epsilon, self.param.step_size,
-                                   self.param.num_steps, self.param.restarts, self.param.delta_norm, early_stop=self.param.eval)
+                                   self.param.num_steps, self.param.restarts, self.param.delta_norm)
+            elif self.param.attack == 'none':
+                delta = torch.zeros_like(X)
             delta = delta.detach()
+            X_adv = normalize(torch.clamp(X + delta[:X.size(0)], min=lower_limit, max=upper_limit))
 
-            robust_output = self.model(normalize(torch.clamp(X + delta[:X.size(0)], min=lower_limit, max=upper_limit)))
+            # eval
+            robust_output = self.model(X_adv)
             robust_loss = self.criterion(robust_output, y)
-
             output = self.model(normalize(X))
             loss = self.criterion(output, y)
 
-            val_robust_loss += robust_loss.item() * y.size(0)
-            val_robust_acc += (robust_output.max(1)[1] == y).sum().item()
-            val_loss += loss.item() * y.size(0)
-            val_acc += (output.max(1)[1] == y).sum().item()
-            val_n += y.size(0)
+            # log
+            val_robust_loss.update(robust_loss.item(), len(y))
+            val_robust_acc.update((robust_output.max(1)[1] == y).mean().item(), len(y))
+            val_loss.update(loss.item(), len(y))
+            val_acc.update((output.max(1)[1] == y).mean().item(), len(y))
 
         self.logger.info('val   \t %d \t \t %.4f ' +
                          '\t %.4f \t %.4f \t %.4f \t %.4f',
                          self.epoch, 0,
-                         val_loss / val_n, val_acc / val_n, val_robust_loss / val_n, val_robust_acc / val_n)
+                         val_loss.mean, val_acc.mean, val_robust_loss.mean, val_robust_acc.mean)
 
-        self.current_perf = val_robust_acc / val_n
-
-        if self.param.eval:
-            return
+        self.current_perf = val_robust_acc.mean
 
         saved_dict = {
             'model_state_dict': self.model.state_dict(),
@@ -189,17 +187,17 @@ class GeneralistTrainer():
 
         # save best
         if self.current_perf > self.best_perf:
-            self.best_perf = val_robust_loss / val_n
+            self.best_perf = self.current_perf
             torch.save(saved_dict, self.param.save_dir / f"best_ckpt.pth")
 
         del saved_dict
 
     def run(self):
 
-        if self.param.eval:
-            self.val_one_epoch()
-            return
-
         for self.epoch in range(self.start_epoch, self.param.epochs):
             self.train_one_epoch()
             self.val_one_epoch()
+
+    def adjust_beta(self, t):
+        return np.interp([t], [0, self.param.epochs // 3, self.param.epochs * 2 // 3, self.param.epochs],
+                         [1.0, 1.0, 1.0, 0.4])[0]

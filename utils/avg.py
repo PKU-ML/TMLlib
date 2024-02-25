@@ -1,25 +1,27 @@
 import math
 
 
-class AverageMeter(object):
-    name = 'No name'
+class AverageMeter():
 
-    def __init__(self, name='No name'):
-        self.name = name
-        self.reset()
+    def __init__(self, name: str = 'No name'):
+        self.name: str = name
+        self.sum: float = 0.0
+        self.num: int = 0
+        self.mean: float = 0.0
+        self.now: float = 0.0
 
     def reset(self):
-        self.sum = 0
-        self.mean = 0
+        self.sum = 0.0
         self.num = 0
-        self.now = 0
+        self.mean = 0.0
+        self.now = 0.0
 
-    def update(self, mean_var, count=1):
+    def update(self, mean_var: float, count: int = 1):
         if math.isnan(mean_var):
             mean_var = 1e6
             print('Avgmeter getting Nan!')
-        self.now = mean_var
-        self.num += count
 
         self.sum += mean_var * count
+        self.num += count
         self.mean = float(self.sum) / self.num
+        self.now = mean_var

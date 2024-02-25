@@ -4,15 +4,15 @@ from utils.dataset import prepare_dataloader
 from utils.misc import set_all_seed, get_logger
 from utils.args import get_args
 
-from trainers import MARTTrainer
-from params import MARTParam
+from trainers import BaseATTrainer
+from params import BaseATParam
 
 
 def main():
 
-    args = get_args(MARTParam)
+    args = get_args(BaseATParam)
 
-    param = MARTParam(args)
+    param = BaseATParam(args)
 
     set_all_seed(param.seed)
 
@@ -24,7 +24,7 @@ def main():
 
     train_dataloader, val_dataloader = prepare_dataloader(param)
 
-    trainer = MARTTrainer(param, train_dataloader, val_dataloader, logger)
+    trainer = BaseATTrainer(param, train_dataloader, val_dataloader, logger)
 
     trainer.run()
 

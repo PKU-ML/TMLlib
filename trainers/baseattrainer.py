@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 from torch.autograd import Variable
 from logging import Logger
 
-from params import MARTParam
+from params import BaseATParam
 from models import get_model
 
 from utils.attack import attack_pgd
@@ -14,12 +14,11 @@ from utils.lr_schedule import LRSchedule
 from utils.avg import AverageMeter
 from utils.mixup import *
 from utils.l1l2 import *
-from utils.loss import mart_loss
 
 
-class MARTTrainer():
+class BaseATTrainer():
 
-    def __init__(self, param: MARTParam, train_dataloader: DataLoader, val_dataloader: DataLoader, logger: Logger) -> None:
+    def __init__(self, param: BaseATParam, train_dataloader: DataLoader, val_dataloader: DataLoader, logger: Logger) -> None:
 
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
@@ -52,31 +51,54 @@ class MARTTrainer():
 
     def train_one_epoch(self):
 
-        train_loss = AverageMeter("train_loss")
+        train_robust_loss = AverageMeter("train_robust_loss")
+        train_robust_acc = AverageMeter("train_robust_acc")
 
         for i, (X, y) in enumerate(self.train_dataloader):
             X, y = X.cuda(), y.cuda()
+            if self.param.cutmix:
+                X, y_a, y_b, lam = cutmix_data(X, y, self.param.cutmix_alpha, self.param.cutmix_beta)
+                X, y_a, y_b = map(Variable, (X, y_a, y_b))
+
+            # lr_schedule
             lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
             self.opt.param_groups[0].update(lr=lr)
             self.opt.zero_grad()
 
-            # calculate robust loss
-            loss = mart_loss(model=self.model,
-                             x_natural=X,
-                             y=y,
-                             optimizer=self.opt,
-                             step_size=self.param.step_size,
-                             epsilon=self.param.epsilon,
-                             perturb_steps=self.param.num_steps,
-                             beta=self.param.mart_beta)
-            loss.backward()
+            # attack
+            self.model.eval()
+            if self.param.attack == 'pgd':
+                if self.param.cutmix:
+                    delta = attack_pgd(self.model, X, y, self.param.epsilon, self.param.step_size,
+                                       self.param.num_steps, self.param.restarts, self.param.delta_norm,
+                                       mixup=True, y_a=y_a, y_b=y_b, lam=lam)
+                else:
+                    delta = attack_pgd(self.model, X, y, self.param.epsilon, self.param.step_size,
+                                       self.param.num_steps, self.param.restarts, self.param.delta_norm)
+            elif self.param.attack == 'none':
+                delta = torch.zeros_like(X)
+            else:
+                ValueError("Error attack type")
+            delta = delta.detach()
+            X_adv = normalize(torch.clamp(X + delta[:X.size(0)], min=lower_limit, max=upper_limit))
+
+            # train
+            self.model.train()
+            robust_output = self.model(X_adv)
+            if self.param.cutmix:
+                robust_loss = mixup_criterion(self.criterion, robust_output, y_a, y_b, lam)
+            else:
+                robust_loss = self.criterion(robust_output, y)
+            robust_loss += get_l1(self.param.l1, self.model)
+            robust_loss.backward()
             self.opt.step()
 
             # log
-            train_loss.update(loss.item(), len(y))
+            train_robust_loss.update(robust_loss.item(), len(y))
+            train_robust_acc .update((robust_output.max(1)[1] == y).mean().item(), len(y))
 
-        self.logger.info('train \t %d \t \t %.4f \t %.4f',
-                         self.epoch, lr, train_loss.mean)
+        self.logger.info('train \t %d \t \t %.4f \t %.4f \t %.4f',
+                         self.epoch, lr, train_robust_loss.mean, train_robust_acc.mean)
 
     def val_one_epoch(self):
 

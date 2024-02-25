@@ -68,7 +68,7 @@ def get_data_batches(data_dir: str, batch_size: int, do_cutout: bool = False, cu
 
 def cifar(root, num_classes=10):
 
-    # TODO deprecated this
+    # TOFDO deprecated this
     if num_classes == 10:
         train_set = CIFAR10(root=root, train=True, download=True)
         test_set = CIFAR10(root=root, train=False, download=True)
@@ -88,7 +88,7 @@ def cifar(root, num_classes=10):
 #####################
 
 class Batches:
-    # TODO deprecated this
+    # TOFDO deprecated this
     def __init__(self, dataset, batch_size, shuffle, set_random_choices=False, num_workers=0, drop_last=False):
         self.dataset = dataset
         self.batch_size = batch_size

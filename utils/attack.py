@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import torch.optim as optim
 import numpy as np
-from .loss import mixup_criterion
+from .mixup import *
 from .tens import *
 from misc import torch_accuracy
 from autoattack import AutoAttack

@@ -3,7 +3,7 @@
 from collections import namedtuple
 import numpy as np
 
-# TODO deprecated this
+# TOFDO deprecated this
 
 ################################################################
 # Components from https://github.com/davidcpage/cifar10-fast ##

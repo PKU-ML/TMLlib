@@ -19,4 +19,3 @@ class DataParam():
         self.num_workers: int = int(args.num_workers)
         self.num_classes: int = int(args.num_classes)
         # TODO more aug params?
-        # TODO Type check?

@@ -1,6 +1,5 @@
 import errno
 import os
-import math
 import numpy as np
 import random
 
@@ -9,6 +8,8 @@ import torch
 import torch.nn as nn
 import torch.utils.data
 import torch.nn.init as init
+import logging
+
 
 def get_mean_and_std(dataset):
     '''Compute the mean and std value of dataset.'''
@@ -102,3 +103,16 @@ def moving_average(net1, net2, decay_rate=0., update_bn=True):
                 module1.running_var *= decay_rate
                 module1.running_var += module2.running_var * (1 - decay_rate)
                 module1.num_batches_tracked = module2.num_batches_tracked
+
+
+def get_logger(log_file: str) -> logging.Logger:
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(
+        format='[%(asctime)s] - %(message)s',
+        datefmt='%Y/%m/%d %H:%M:%S',
+        level=logging.DEBUG,
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler()
+        ])
+    return logger
