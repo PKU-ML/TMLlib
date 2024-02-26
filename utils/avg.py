@@ -4,7 +4,7 @@ import math
 class AverageMeter():
 
     def __init__(self, name: str = 'No name'):
-        self.name: str = name
+        self.name: str = str(name)
         self.sum: float = 0.0
         self.num: int = 0
         self.mean: float = 0.0

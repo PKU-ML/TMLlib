@@ -1,5 +1,6 @@
 import os
 
+from utils.const import set_global_device
 from utils.dataset import prepare_dataloader
 from utils.misc import set_all_seed, get_logger
 from utils.args import get_args
@@ -13,7 +14,10 @@ def main():
     args = get_args(AWPParam)
 
     param = AWPParam(args)
+    
+    device = device if device == "cpu" else param.device
 
+    set_global_device(param.device)
     set_all_seed(param.seed)
 
     os.makedirs(param.save_dir, exist_ok=True)

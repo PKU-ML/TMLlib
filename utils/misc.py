@@ -86,7 +86,7 @@ def set_all_seed(seed_num: int):
     np.random.seed(seed_num)
     torch.manual_seed(seed_num)
     torch.cuda.manual_seed(seed_num)
-    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.benchmark = True  # TODO param?
     torch.backends.cudnn.deterministic = True
 
 

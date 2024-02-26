@@ -1,7 +1,5 @@
 import torch
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 upper_limit, lower_limit = 1, 0
 
 cifar10_mean = (0.4914, 0.4822, 0.4465)  # equals np.mean(train_set.train_data, axis=(0,1,2))/255

@@ -1,5 +1,4 @@
 import torch
-from .const import device
 
 
 def get_l1(l1: float, model: torch.nn.Module):

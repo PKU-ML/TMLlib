@@ -25,7 +25,7 @@ class BaseATTrainer():
         self.logger = logger
         self.param = param
 
-        self.model = get_model(self.param.model, num_classes=param.num_classes)
+        self.model = get_model(self.param.model, self.param.device, num_classes=param.num_classes)
         # self.model = nn.DataParallel(self.model).cuda()
         self.opt = torch.optim.SGD(get_l2(self.param.l2, self.model), lr=self.param.lr_max,
                                    momentum=self.param.momentum, weight_decay=self.param.weight_decay)
@@ -95,7 +95,7 @@ class BaseATTrainer():
 
             # log
             train_robust_loss.update(robust_loss.item(), len(y))
-            train_robust_acc .update((robust_output.max(1)[1] == y).mean().item(), len(y))
+            train_robust_acc.update((robust_output.max(1)[1] == y).sum().item() / len(y), len(y))
 
         self.logger.info('train \t %d \t \t %.4f \t %.4f \t %.4f',
                          self.epoch, lr, train_robust_loss.mean, train_robust_acc.mean)
@@ -128,9 +128,9 @@ class BaseATTrainer():
 
             # log
             val_robust_loss.update(robust_loss.item(), len(y))
-            val_robust_acc.update((robust_output.max(1)[1] == y).mean().item(), len(y))
+            val_robust_acc.update((robust_output.max(1)[1] == y).sum().item() / len(y), len(y))
             val_loss.update(loss.item(), len(y))
-            val_acc.update((output.max(1)[1] == y).mean().item(), len(y))
+            val_acc.update((output.max(1)[1] == y).sum().item() / len(y), len(y))
 
         self.logger.info('val   \t %d \t \t %.4f ' +
                          '\t %.4f \t %.4f \t %.4f \t %.4f',

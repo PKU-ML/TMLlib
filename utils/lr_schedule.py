@@ -6,12 +6,12 @@ from typing import List, Optional
 
 class LRSchedule():
     def __init__(self,
-                 lr_schedule: Optional[str],
-                 epochs: Optional[int],
-                 lr_max: Optional[float],
-                 epoch_list: Optional[List[int]],
-                 lr_list: Optional[List[float]],
-                 param: Optional[LRScheduleParam],
+                 lr_schedule: Optional[str] = None,
+                 epochs: Optional[int] = None,
+                 lr_max: Optional[float] = None,
+                 epoch_list: Optional[List[int]] = None,
+                 lr_list: Optional[List[float]] = None,
+                 param: Optional[LRScheduleParam] = None,
                  ) -> None:
         if param is not None:
             self.lr_schedule = param.lr_schedule

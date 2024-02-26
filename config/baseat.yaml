@@ -10,10 +10,11 @@ num_classes: 10
 # TrainParam
 epochs: 200
 model: resnet
-seed: 1898
+seed: 1986
 save_freq: 10
 taskname: baseAT
 resume: false
+device: cuda
 
 # OptimParam
 lr_max: 0.1
@@ -24,11 +25,11 @@ l2: 0.0
 
 # LRScheduleParam
 lr_schedule: stage
-epoch_list: [0, 50, 75, 100]
-lr_list: [0.1, 0.01, 0.001]
+epoch_list: [0, 100, 150, 200]
+lr_list: [0.01, 0.001, 0.0001]
 
 # AttackParam
-attack: pgd
+attack: none
 epsilon: 8
 step_size: 2
 num_steps: 10

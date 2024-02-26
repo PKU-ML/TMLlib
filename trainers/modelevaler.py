@@ -22,25 +22,24 @@ class ModelEvaler():
         self.val_dataloader = val_dataloader
         self.logger = logger
         self.param = param
-        self.model = get_model(self.param.model, num_classes=param.num_classes)
+        self.model = get_model(self.param.model, self.param.device, num_classes=param.num_classes)
         saved_dict = torch.load(self.param.ckpt_file)
         self.model.load_state_dict(saved_dict['model_state_dict'])
         del saved_dict
-        self.attacker = AttackerPolymer(self.param.epsilon, self.param.num_steps, self.param.step_size, self.param.num_classes, device)
+        self.attacker = AttackerPolymer(self.param.epsilon, self.param.num_steps, self.param.step_size, self.param.num_classes, self.param.device)
 
-    @staticmethod
-    def attack(model: nn.Module, Attackers: AttackerPolymer, val_dataloader: DataLoader):
+    def attack(self):
 
         attack_list = ['NAT', 'PGD_20', 'PGD_100', 'MIM', 'CW',
                        'APGD_ce', 'APGD_dlr', 'APGD_t', 'FAB_t', 'Square', 'AA',]
-        model.eval()
+        self.model.eval()
         accuracy_dict = {key: AverageMeter(key) for key in attack_list}
-        pbar = tqdm(val_dataloader)
+        pbar = tqdm(self.val_dataloader)
         pbar.set_description('Attacking all')
         for batch_idx, (inputs, targets) in enumerate(pbar):
             pbar_dic = OrderedDict()
-            inputs, targets = inputs.to(device), targets.to(device)
-            acc_dict = Attackers.run_all(model, inputs, targets)
+            inputs, targets = inputs.to(self.param.device), targets.to(self.param.device)
+            acc_dict = self.attacker.run_all(self.model, inputs, targets)
             for key in attack_list:
                 accuracy_dict[key].update(acc_dict[key][0].item(), len(targets))
                 pbar_dic[key] = '{:.2f}'.format(accuracy_dict[key].mean)

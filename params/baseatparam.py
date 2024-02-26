@@ -21,9 +21,9 @@ class BaseATParam(DataParam, TrainParam, OptimParam, LRScheduleParam, AttackPara
         CutmixParam.add_argument(parser)
 
     def __init__(self, args: Namespace) -> None:
-        super(DataParam,       self).__init__(args)
-        super(TrainParam,      self).__init__(args)
-        super(OptimParam,      self).__init__(args)
-        super(LRScheduleParam, self).__init__(args)
-        super(AttackParam,     self).__init__(args)
-        super(CutmixParam,     self).__init__(args)
+        DataParam.__init__(self, args)
+        TrainParam.__init__(self, args)
+        OptimParam.__init__(self, args)
+        LRScheduleParam.__init__(self, args)
+        AttackParam.__init__(self, args)
+        CutmixParam.__init__(self, args)

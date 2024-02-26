@@ -1,7 +1,7 @@
 from torchvision.datasets import CIFAR10, CIFAR100
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
-from params import DataParam
+from params.dataparam import DataParam
 from typing import Tuple
 
 # Setup data loader
@@ -31,7 +31,7 @@ def prepare_dataloader(param: DataParam) -> Tuple[DataLoader, DataLoader]:
 
     test_dataset: Dataset = DATASET_CLASS(root=param.data_dir, train=False, download=True, transform=transform_test)
 
-    train_dataloader: DataLoader = DataLoader(train_dataset, batch_size=param.batch_size, shuffle=True, num_workers=param.num_workers)
+    train_dataloader: DataLoader = DataLoader(train_dataset, batch_size=param.batch_size, shuffle=False, num_workers=param.num_workers)
 
     test_dataloader: DataLoader = DataLoader(test_dataset, batch_size=param.batch_size, shuffle=False, num_workers=param.num_workers)
 

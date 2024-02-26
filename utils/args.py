@@ -14,11 +14,11 @@ def get_args(PARAM_CLASS) -> Namespace:
             raise ImportError("pyyaml is not installed")
         with open(sys.argv[2], 'r') as file:
             yaml_data = yaml.safe_load(file)
-        args = Namespace(yaml_data)
+        args = Namespace(**yaml_data)
     elif len(sys.argv) == 3 and sys.argv[1] == '--json':
         with open(sys.argv[2], 'r') as file:
             json_data = json.load(file)
-        args = Namespace(json_data)
+        args = Namespace(**json_data)
     else:
         parser = ArgumentParser()
         PARAM_CLASS.add_argument(parser)

@@ -6,8 +6,8 @@ import torch.optim as optim
 import numpy as np
 from .mixup import *
 from .tens import *
-from misc import torch_accuracy
-from autoattack import AutoAttack
+from .misc import torch_accuracy
+# from autoattack import AutoAttack
 
 
 def attack_pgd(model, X, y, epsilon, alpha, attack_iters, restarts,
