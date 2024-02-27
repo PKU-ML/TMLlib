@@ -18,4 +18,4 @@ class DataParam():
         self.batch_size: int = int(args.batch_size)
         self.num_workers: int = int(args.num_workers)
         self.num_classes: int = int(args.num_classes)
-        # TODO more aug params?
+        # TODO add more parameters about data enhancement

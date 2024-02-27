@@ -10,23 +10,23 @@ num_classes: 10
 # TrainParam
 epochs: 200
 model: resnet
-seed: 1898
+seed: 2024
 save_freq: 10
-taskname: baseAT
+taskname: Generalist
 resume: false
 device: cuda
 
 # OptimParam
-lr_max: 0.1
-weight_decay: 0.0005
+lr_max: 0.01
 momentum: 0.9
+weight_decay: 0.0035
 l1: 0.0
 l2: 0.0
 
 # LRScheduleParam
-lr_schedule: stage
-epoch_list: [0, 100, 150, 200]
-lr_list: [0.01, 0.001, 0.0001]
+lr_schedule: linear
+epoch_list: [0, 66, 133, 200]
+lr_list: [0.01, 0.01, 0.001, 0.0001]
 
 # AttackParam
 attack: pgd

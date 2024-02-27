@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 from logging import Logger
+from tqdm import tqdm
 
 from params import BaseATParam
 from models import get_model
@@ -47,14 +48,13 @@ class BaseATTrainer():
         self.criterion = nn.CrossEntropyLoss()
         self.lr_schedule = LRSchedule(param=self.param)
 
-        self.logger.info('Epoch \t \t LR \t \t Train Loss \t Train Acc \t Train Robust Loss \t Train Robust Acc \t Test Loss \t Test Acc \t Test Robust Loss \t Test Robust Acc')
-
     def train_one_epoch(self):
 
         train_robust_loss = AverageMeter("train_robust_loss")
         train_robust_acc = AverageMeter("train_robust_acc")
 
-        for i, (X, y) in enumerate(self.train_dataloader):
+        pbar = tqdm(self.train_dataloader)
+        for i, (X, y) in enumerate(pbar):
             X, y = X.cuda(), y.cuda()
             if self.param.cutmix:
                 X, y_a, y_b, lam = cutmix_data(X, y, self.param.cutmix_alpha, self.param.cutmix_beta)
@@ -97,8 +97,8 @@ class BaseATTrainer():
             train_robust_loss.update(robust_loss.item(), len(y))
             train_robust_acc.update((robust_output.max(1)[1] == y).sum().item() / len(y), len(y))
 
-        self.logger.info('train \t %d \t \t %.4f \t %.4f \t %.4f',
-                         self.epoch, lr, train_robust_loss.mean, train_robust_acc.mean)
+            pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {train_robust_loss.mean:.4f}')
+            pbar.update()
 
     def val_one_epoch(self):
 

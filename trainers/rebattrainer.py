@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 from torch.autograd import Variable
 import torch.nn.functional as F
 from logging import Logger
+from tqdm import tqdm
 import copy
 
 from params import ReBATParam
@@ -56,8 +57,6 @@ class ReBATTrainer():
         self.lr_schedule = LRSchedule(param=self.param)
         self.reg_scheduler = self.get_reg_schedule()
 
-        self.logger.info('Epoch \t \t LR \t \t Train Loss \t Train Acc \t Train Robust Loss \t Train Robust Acc \t Test Loss \t Test Acc \t Test Robust Loss \t Test Robust Acc')
-
     def train_one_epoch(self):
 
         train_robust_loss = AverageMeter("train_robust_loss")
@@ -67,21 +66,22 @@ class ReBATTrainer():
         decay_rate = self.param.decay_rate if self.epoch >= self.param.warmup_epochs else 0.  # for WA
         boat_beta = self.param.boat_beta if self.epoch >= self.param.warmup_epochs else 0.  # force deactivating BoAT regularization before WA starts
 
-        for i, (X, y) in enumerate(self.train_dataloader):
+        pbar = tqdm(self.train_dataloader)
+        for i, (X, y) in enumerate(pbar):
             X, y = X.cuda(), y.cuda()
             if self.param.cutmix:
                 X, y_a, y_b, lam = cutmix_data(X, y, self.param.cutmix_alpha, self.param.cutmix_beta)
                 X, y_a, y_b = map(Variable, (X, y_a, y_b))
 
             # lr_schedule
-            lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))  # TODO to be fixed
+            lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
             self.opt.param_groups[0].update(lr=lr)
             self.opt.zero_grad()
 
             # attack
             self.model.eval()
             if self.param.attack == 'pgd':
-                if not self.param.stronger_attack or self.lr_schedule.stage(self.epoch) < 1:  # ReBAT[strong] # TODO
+                if not self.param.stronger_attack or self.lr_schedule.stage(self.epoch) < 1:
                     if self.param.cutmix:
                         delta = attack_pgd(self.model, X, y, self.param.epsilon, self.param.step_size,
                                            self.param.num_steps, self.param.restarts, self.param.delta_norm,
@@ -112,8 +112,8 @@ class ReBATTrainer():
             else:
                 robust_loss = self.criterion(robust_output, y)
 
+            reg_loss = torch.tensor(0.).cuda()
             if boat_beta > 0:  # apply BoAT loss
-                reg_loss = torch.tensor(0.).cuda()
                 with torch.no_grad():
                     robust_output_wa = self.model_wa(X_adv)
                 reg_loss = F.kl_div(F.log_softmax(robust_output, dim=1),
@@ -134,8 +134,8 @@ class ReBATTrainer():
             train_robust_acc.update((robust_output.max(1)[1] == y).sum().item() / len(y), len(y))
             train_reg_loss.update(reg_loss.item(), len(y))
 
-        self.logger.info('train \t %d \t \t %.4f \t %.4f \t %.4f \t %.4f',
-                         self.epoch, lr, train_robust_loss.mean, train_robust_acc.mean, train_reg_loss.mean)
+            pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {train_robust_loss.mean:.4f}')
+            pbar.update()
 
     def val_one_epoch(self):
 

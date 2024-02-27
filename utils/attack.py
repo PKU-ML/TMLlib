@@ -7,6 +7,7 @@ import numpy as np
 from .mixup import *
 from .tens import *
 from .misc import torch_accuracy
+from .loss import nt_xent
 # from autoattack import AutoAttack
 
 
@@ -66,6 +67,27 @@ def attack_pgd(model, X, y, epsilon, alpha, attack_iters, restarts,
         max_delta[all_loss >= max_loss] = delta.detach()[all_loss >= max_loss]
         max_loss = torch.max(max_loss, all_loss)
     return max_delta
+
+
+def PGD_contrastive(model, inputs, eps=8. / 255., alpha=2. / 255., iters=10):
+    # init
+    delta = torch.rand_like(inputs) * eps * 2 - eps
+    delta = torch.nn.Parameter(delta)
+
+    for _ in range(iters):
+        features = model.eval()(inputs + delta, 'pgd', swap=True)
+
+        model.zero_grad()
+        loss = nt_xent(features)
+        loss.backward()
+        # print("loss is {}".format(loss))
+
+        delta.data = delta.data + alpha * delta.grad.sign()
+        delta.grad = None
+        delta.data = torch.clamp(delta.data, min=-eps, max=eps)
+        delta.data = torch.clamp(inputs + delta.data, min=0, max=1) - inputs
+
+    return (inputs + delta).detach()
 
 
 class AttackerPolymer:

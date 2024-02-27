@@ -3,6 +3,8 @@ import math
 from params.lrscheduleparam import LRScheduleParam
 from typing import List, Optional
 
+# TODO Implement lr scheduler with torch.optim.lr_scheduler
+
 
 class LRSchedule():
     def __init__(self,

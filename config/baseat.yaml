@@ -10,16 +10,16 @@ num_classes: 10
 # TrainParam
 epochs: 200
 model: resnet
-seed: 1986
+seed: 2024
 save_freq: 10
-taskname: baseAT
+taskname: BaseAT
 resume: false
 device: cuda
 
 # OptimParam
-lr_max: 0.1
-weight_decay: 0.0005
+lr_max: 0.01
 momentum: 0.9
+weight_decay: 0.0005
 l1: 0.0
 l2: 0.0
 
@@ -29,7 +29,7 @@ epoch_list: [0, 100, 150, 200]
 lr_list: [0.01, 0.001, 0.0001]
 
 # AttackParam
-attack: none
+attack: pgd
 epsilon: 8
 step_size: 2
 num_steps: 10

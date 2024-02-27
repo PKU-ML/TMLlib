@@ -5,36 +5,39 @@ from torch.autograd import Variable
 from logging import Logger
 from tqdm import tqdm
 
-from params import AWPParam
-from models import get_model
+from params import DynACLParam
+from models.sslmodels import get_model_ssl
 
-from utils.attack import attack_pgd
+from utils.attack import attack_pgd, PGD_contrastive
 from utils.const import *
 from utils.tens import normalize
 from utils.lr_schedule import LRSchedule
 from utils.avg import AverageMeter
 from utils.mixup import *
 from utils.l1l2 import *
-from utils.awp import AdvWeightPerturb
+from utils.lars import LARS
+from utils.loss import nt_xent
 
 
-class AWPTrainer():
+class DynACLTrainer():
 
-    def __init__(self, param: AWPParam, train_dataloader: DataLoader, val_dataloader: DataLoader, logger: Logger) -> None:
+    def __init__(self, param: DynACLParam, train_dataloader: DataLoader, val_dataloader: DataLoader, logger: Logger) -> None:
 
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
         self.logger = logger
         self.param = param
 
-        self.model = get_model(self.param.model, self.param.device, num_classes=param.num_classes)
+        self.model = get_model_ssl(self.param.model, self.param.device, num_classes=param.num_classes, twoLayerProj=self.param.twoLayerProj)
         # self.model = nn.DataParallel(self.model).cuda()
-        self.opt = torch.optim.SGD(get_l2(self.param.l2, self.model), lr=self.param.lr_max,
-                                   momentum=self.param.momentum, weight_decay=self.param.weight_decay)
-
-        self.proxy = get_model(self.param.model, self.param.device, num_classes=param.num_classes)
-        # self.proxy = nn.DataParallel(self.proxy).cuda()
-        self.proxy_opt = torch.optim.SGD(self.proxy.parameters(), lr=0.01)  # TODO add parameters about proxy_opt
+        if self.param.optimizer == 'adam':
+            self.opt = torch.optim.Adam(self.model.parameters(), lr=self.param.lr_max, weight_decay=self.param.weight_decay)
+        elif self.param.optimizer == 'lars':
+            self.opt = LARS(self.model.parameters(), lr=self.param.lr_max, weight_decay=self.param.weight_decay)
+        elif self.param.optimizer == 'sgd':
+            self.opt = torch.optim.SGD(self.model.parameters(), lr=self.param.lr_max, momentum=self.param.momentum, weight_decay=self.param.weight_decay)
+        else:
+            raise ValueError("no defined optimizer")
 
         self.best_perf = -float('inf')
         self.current_perf = -float('inf')
@@ -44,8 +47,6 @@ class AWPTrainer():
             saved_dict = torch.load(self.param.save_dir / f"last_ckpt.pth")
             self.model.load_state_dict(saved_dict['model_state_dict'])
             self.opt.load_state_dict(saved_dict['opt_state_dict'])
-            self.proxy.load_state_dict(saved_dict['proxy_state_dict'])
-            self.proxy_opt.load_state_dict(saved_dict['proxy_opt_state_dict'])
             self.start_epoch = saved_dict['epoch']
             self.best_perf = saved_dict['perf']
             self.logger.info(f'Resuming at epoch {self.param.save_dir / f"last_ckpt.pth"}')
@@ -54,21 +55,15 @@ class AWPTrainer():
         self.epoch = self.start_epoch
         self.criterion = nn.CrossEntropyLoss()
         self.lr_schedule = LRSchedule(param=self.param)
-        self.awp_adversary = AdvWeightPerturb(model=self.model, proxy=self.proxy, proxy_optim=self.proxy_opt, gamma=self.param.awp_gamma)
 
     def train_one_epoch(self):
 
-        # TODO: AWP for TRADES
-
-        train_robust_loss = AverageMeter("train_robust_loss")
-        train_robust_acc = AverageMeter("train_robust_acc")
+        train_loss = AverageMeter("train_robust_loss")
 
         pbar = tqdm(self.train_dataloader)
-        for i, (X, y) in enumerate(pbar):
-            X, y = X.cuda(), y.cuda()
-            if self.param.cutmix:
-                X, y_a, y_b, lam = cutmix_data(X, y, self.param.cutmix_alpha, self.param.cutmix_beta)
-                X, y_a, y_b = map(Variable, (X, y_a, y_b))
+        for i, X in enumerate(pbar):
+            d = X.size()
+            X = X.view(d[0]*2, d[2], d[3], d[4]).cuda()
 
             # lr_schedule
             lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
@@ -76,52 +71,23 @@ class AWPTrainer():
             self.opt.zero_grad()
 
             # attack
-            self.model.eval()
-            if self.param.attack == 'pgd':
-                if self.param.cutmix:
-                    delta = attack_pgd(self.model, X, y, self.param.epsilon, self.param.step_size,
-                                       self.param.num_steps, self.param.restarts, self.param.delta_norm,
-                                       mixup=True, y_a=y_a, y_b=y_b, lam=lam)
-                else:
-                    delta = attack_pgd(self.model, X, y, self.param.epsilon, self.param.step_size,
-                                       self.param.num_steps, self.param.restarts, self.param.delta_norm)
-            elif self.param.attack == 'none':
-                delta = torch.zeros_like(X)
-            else:
-                ValueError("Error attack type")
-            delta = delta.detach()
-            X_adv = normalize(torch.clamp(X + delta[:X.size(0)], min=lower_limit, max=upper_limit))
+            X_adv = PGD_contrastive(self.model.eval(), X, self.param.epsilon, self.param.step_size, self.param.num_steps)
+            features_adv = self.model.train()(X_adv, 'pgd', swap=True)
+            features = self.model.train()(X, 'normal', swap=True)
+            self.model._momentum_update_encoder_k()
 
-            # train
-            self.model.train()
-            ####################################
-            # calculate adversarial weight perturbation and perturb it
-            if self.epoch >= self.param.awp_warmup:
-                # not compatible to mixup currently.
-                assert (not self.param.cutmix)
-                awp = self.awp_adversary.calc_awp(inputs_adv=X_adv,
-                                                  targets=y)
-                self.awp_adversary.perturb(awp)
-            ####################################
-            robust_output = self.model(X_adv)
-            if self.param.cutmix:
-                robust_loss = mixup_criterion(self.criterion, robust_output, y_a, y_b, lam)
-            else:
-                robust_loss = self.criterion(robust_output, y)
-            robust_loss += get_l1(self.param.l1, self.model)
-            robust_loss.backward()
+            weight_adv = min(1.0 + (self.epoch // self.param.reload_frequency)
+                             * (self.param.reload_frequency / self.param.epochs) * self.param.swap_param, 2)
+
+            loss = (nt_xent(features) * (2 - weight_adv) + nt_xent(features_adv) * weight_adv) / 2
+
+            loss.backward()
             self.opt.step()
 
-            ####################################
-            if self.epoch >= self.param.awp_warmup:
-                self.awp_adversary.restore(awp)
-            ####################################
-
             # log
-            train_robust_loss.update(robust_loss.item(), len(y))
-            train_robust_acc.update((robust_output.max(1)[1] == y).sum().item() / len(y), len(y))
+            train_loss.update(loss.item(), d[0])
 
-            pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {train_robust_loss.mean:.4f}')
+            pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {train_loss.mean:.4f}')
             pbar.update()
 
     def val_one_epoch(self):
@@ -166,8 +132,6 @@ class AWPTrainer():
         saved_dict = {
             'model_state_dict': self.model.state_dict(),
             'opt_state_dict': self.opt.state_dict(),
-            'proxy_state_dict': self.proxy.state_dict(),
-            'proxy_opt_state_dict': self.proxy_opt.state_dict(),
             'epoch': self.epoch,
             'perf': self.current_perf,
         }
@@ -190,4 +154,4 @@ class AWPTrainer():
 
         for self.epoch in range(self.start_epoch, self.param.epochs):
             self.train_one_epoch()
-            self.val_one_epoch()
+            # self.val_one_epoch()

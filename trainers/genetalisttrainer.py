@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 from logging import Logger
+from tqdm import tqdm
 import copy
 
 from params import GeneralistParam
@@ -35,8 +36,8 @@ class GeneralistTrainer():
 
         self.model_ST = get_model(self.param.model, self.param.device, num_classes=param.num_classes)
         # self.model_ST = nn.DataParallel(self.model_ST).cuda()
-        self.opt_ST = torch.optim.SGD(self.model_ST.parameters(), lr=0.1,
-                                      momentum=0.9, weight_decay=5e-4)  # TODO opt_ST param?
+        self.opt_ST = torch.optim.SGD(self.model_ST.parameters(), lr=0.01,
+                                      momentum=0.9, weight_decay=5e-4)  # TODO  add parameters about opt_ST
 
         self.best_perf = -float('inf')
         self.current_perf = -float('inf')
@@ -63,8 +64,6 @@ class GeneralistTrainer():
         self.criterion_ST = nn.CrossEntropyLoss()
         self.beta_schedule = lambda t: np.interp(t, [0, self.param.epochs // 3, self.param.epochs * 2 // 3, self.param.epochs], [1.0, 1.0, 1.0, 0.4])
 
-        self.logger.info('Epoch \t \t LR \t \t Train Loss \t Train Acc \t Train Robust Loss \t Train Robust Acc \t Test Loss \t Test Acc \t Test Robust Loss \t Test Robust Acc')
-
     def train_one_epoch(self):
 
         train_loss = AverageMeter("train_loss")
@@ -72,9 +71,10 @@ class GeneralistTrainer():
         train_robust_loss = AverageMeter("train_robust_loss")
         train_robust_acc = AverageMeter("train_robust_acc")
 
-        for i, (X, y) in enumerate(self.train_dataloader):
+        pbar = tqdm(self.train_dataloader)
+        for i, (X, y) in enumerate(pbar):
             X, y = X.cuda(), y.cuda()
-            lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))  # TODO lr_schedule is not correct
+            lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
             self.opt.param_groups[0].update(lr=lr)
             self.opt.zero_grad()
 
@@ -127,8 +127,8 @@ class GeneralistTrainer():
             train_loss.update(loss_st.item(), len(y))
             train_acc.update((nat_logit.max(1)[1] == y).sum().item() / len(y), len(y))
 
-        self.logger.info('train \t %d \t \t %.4f \t %.4f \t %.4f \t %.4f \t \t %.4f',
-                         self.epoch, lr, train_robust_loss.mean, train_robust_acc.mean, train_loss.mean, train_acc.mean)
+            pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {train_robust_loss.mean:.4f}|{train_loss.mean:.4f}')
+            pbar.update()
 
     def val_one_epoch(self):
 

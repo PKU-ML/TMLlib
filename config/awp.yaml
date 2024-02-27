@@ -9,15 +9,15 @@ num_classes: 10
 
 # TrainParam
 epochs: 200
-model: resnet
-seed: 1898
+model: preactresnet
+seed: 2024
 save_freq: 10
-taskname: baseAT
+taskname: AWP
 resume: false
 device: cuda
 
 # OptimParam
-lr_max: 0.1
+lr_max: 0.01
 weight_decay: 0.0005
 momentum: 0.9
 l1: 0.0

@@ -20,7 +20,7 @@ def main():
 
     logger = get_logger(param.log_file)
 
-    logger.info(param)
+    logger.info(args)
 
     _, val_dataloader = prepare_dataloader(param)
 

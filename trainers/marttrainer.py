@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 from logging import Logger
+from tqdm import tqdm
 
 from params import MARTParam
 from models import get_model
@@ -48,13 +49,13 @@ class MARTTrainer():
         self.criterion = nn.CrossEntropyLoss()
         self.lr_schedule = LRSchedule(param=self.param)
 
-        self.logger.info('Epoch \t \t LR \t \t Train Loss \t Train Acc \t Train Robust Loss \t Train Robust Acc \t Test Loss \t Test Acc \t Test Robust Loss \t Test Robust Acc')
-
     def train_one_epoch(self):
 
+        # TODO BUG: Output NaN result
         train_loss = AverageMeter("train_loss")
 
-        for i, (X, y) in enumerate(self.train_dataloader):
+        pbar = tqdm(self.train_dataloader)
+        for i, (X, y) in enumerate(pbar):
             X, y = X.cuda(), y.cuda()
             lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
             self.opt.param_groups[0].update(lr=lr)
@@ -75,8 +76,8 @@ class MARTTrainer():
             # log
             train_loss.update(loss.item(), len(y))
 
-        self.logger.info('train \t %d \t \t %.4f \t %.4f',
-                         self.epoch, lr, train_loss.mean)
+            pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {train_loss.mean:.4f}')
+            pbar.update()
 
     def val_one_epoch(self):
 
