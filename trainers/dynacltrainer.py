@@ -21,9 +21,14 @@ from utils.loss import nt_xent
 
 class DynACLTrainer():
 
-    def __init__(self, param: DynACLParam, train_dataloader: DataLoader, val_dataloader: DataLoader, logger: Logger) -> None:
+    def __init__(self, param: DynACLParam,
+                 train_dataloader: DataLoader,
+                 train_linear_dataloader: DataLoader,
+                 val_dataloader: DataLoader,
+                 logger: Logger) -> None:
 
         self.train_dataloader = train_dataloader
+        self.train_linear_dataloader = train_linear_dataloader
         self.val_dataloader = val_dataloader
         self.logger = logger
         self.param = param
@@ -56,7 +61,7 @@ class DynACLTrainer():
         self.criterion = nn.CrossEntropyLoss()
         self.lr_schedule = LRSchedule(param=self.param)
 
-    def train_one_epoch(self):
+    def train_encoder_one_epoch(self):
 
         train_loss = AverageMeter("train_robust_loss")
 
@@ -89,6 +94,55 @@ class DynACLTrainer():
 
             pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {train_loss.mean:.4f}')
             pbar.update()
+
+            # TODO reload
+
+    def train_classifier_one_epoch(self):
+
+        train_loss = AverageMeter()
+
+        pbar = tqdm(self.train_linear_dataloader)
+
+        previous_fc = self.model.encoder_k.fc
+        ch = self.model.encoder_k.fc.in_features
+        self.model.encoder_k.fc = nn.Linear(ch, self.param.num_classes)
+        self.model.cuda()
+        parameters = list(filter(lambda p: p.requires_grad, self.model.encoder_k.parameters()))
+        optimizer = torch.optim.SGD(
+            parameters, lr=self.param.lr_max, weight_decay=self.param.weight_decay,
+            momentum=self.param.momentum, nesterov=True)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(
+            optimizer, milestones=[10, 20], gamma=0.1)
+
+        for epoch in range(self.param.epochs):
+
+            for i, (X, y) in enumerate(pbar):
+
+                X, y = X.cuda(), y.cuda()
+                # lr_schedule
+                lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_linear_dataloader))
+                self.opt.param_groups[0].update(lr=lr)
+                self.opt.zero_grad()
+
+                # train
+                output = self.model.eval()(X, 'pgd')
+                loss = self.criterion(output, y)
+
+                loss.backward()
+                optimizer.step()
+
+                # log
+                train_loss.update(loss.item(), len(y))
+
+                pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {train_loss.mean:.4f}')
+                pbar.update()
+
+            scheduler.step()
+        self.model.encoder_k.fc = previous_fc
+        self.model.cuda()
+
+        for param in self.model.encoder_k.parameters():
+            param.requires_grad = False
 
     def val_one_epoch(self):
 
