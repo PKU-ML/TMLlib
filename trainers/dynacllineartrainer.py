@@ -5,7 +5,7 @@ from torch.autograd import Variable
 from logging import Logger
 from tqdm import tqdm
 
-from params import DynACLParam
+from params import DynACLLinearParam
 from models.sslmodels import get_model_ssl
 
 from utils.attack import attack_pgd, PGD_contrastive
@@ -19,25 +19,28 @@ from utils.lars import LARS
 from utils.loss import nt_xent
 
 
-class DynACLTrainer():
+class DynACLLinearTrainer():
 
-    def __init__(self, param: DynACLParam, train_dataloader: DataLoader, val_dataloader: DataLoader, logger: Logger) -> None:
+    def __init__(self, param: DynACLLinearParam,
+                 train_dataloader: DataLoader,
+                 train_linear_dataloader: DataLoader,
+                 val_dataloader: DataLoader,
+                 logger: Logger) -> None:
 
         self.train_dataloader = train_dataloader
+        self.train_linear_dataloader = train_linear_dataloader
         self.val_dataloader = val_dataloader
         self.logger = logger
         self.param = param
 
         self.model = get_model_ssl(self.param.model, self.param.device, num_classes=param.num_classes, twoLayerProj=self.param.twoLayerProj)
         # self.model = nn.DataParallel(self.model).cuda()
-        if self.param.optimizer == 'adam':
-            self.opt = torch.optim.Adam(self.model.parameters(), lr=self.param.lr_max, weight_decay=self.param.weight_decay)
-        elif self.param.optimizer == 'lars':
-            self.opt = LARS(self.model.parameters(), lr=self.param.lr_max, weight_decay=self.param.weight_decay)
-        elif self.param.optimizer == 'sgd':
-            self.opt = torch.optim.SGD(self.model.parameters(), lr=self.param.lr_max, momentum=self.param.momentum, weight_decay=self.param.weight_decay)
-        else:
-            raise ValueError("no defined optimizer")
+        self.previous_fc = self.model.encoder_k.fc
+        self.model.encoder_k.fc = nn.Linear(self.model.encoder_k.fc.in_features, self.param.num_classes)
+        self.model.cuda()
+        parameters = list(filter(lambda p: p.requires_grad, self.model.encoder_k.parameters()))
+        self.opt = torch.optim.SGD(parameters, lr=self.param.lr_max, weight_decay=self.param.weight_decay,
+                                   momentum=self.param.momentum, nesterov=True)
 
         self.best_perf = -float('inf')
         self.current_perf = -float('inf')
@@ -54,43 +57,41 @@ class DynACLTrainer():
 
         self.epoch = self.start_epoch
         self.criterion = nn.CrossEntropyLoss()
-        self.lr_schedule = LRSchedule(param=self.param)
+        self.lr_schedule = torch.optim.lr_scheduler.MultiStepLR(self.opt, milestones=[10, 20], gamma=0.1)
 
-    def train_encoder_one_epoch(self):
+    def train_one_epoch(self):
 
-        train_loss = AverageMeter("train_robust_loss")
+        train_loss = AverageMeter()
 
-        pbar = tqdm(self.train_dataloader)
-        for i, X in enumerate(pbar):
-            d = X.size()
-            X = X.view(d[0]*2, d[2], d[3], d[4]).cuda()
+        pbar = tqdm(self.train_linear_dataloader)
 
+        for i, (X, y) in enumerate(pbar):
+
+            X, y = X.cuda(), y.cuda()
             # lr_schedule
-            lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
-            self.opt.param_groups[0].update(lr=lr)
+            # lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_linear_dataloader))
+            # self.opt.param_groups[0].update(lr=lr)
             self.opt.zero_grad()
 
-            # attack
-            X_adv = PGD_contrastive(self.model.eval(), X, self.param.epsilon, self.param.step_size, self.param.num_steps)
-            features_adv = self.model.train()(X_adv, 'pgd', swap=True)
-            features = self.model.train()(X, 'normal', swap=True)
-            self.model._momentum_update_encoder_k()
-
-            weight_adv = min(1.0 + (self.epoch // self.param.reload_frequency)
-                             * (self.param.reload_frequency / self.param.epochs) * self.param.swap_param, 2)
-
-            loss = (nt_xent(features) * (2 - weight_adv) + nt_xent(features_adv) * weight_adv) / 2
+            # train
+            output = self.model.eval()(X, 'pgd')
+            loss = self.criterion(output, y)
 
             loss.backward()
             self.opt.step()
 
             # log
-            train_loss.update(loss.item(), d[0])
+            train_loss.update(loss.item(), len(y))
 
             pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {train_loss.mean:.4f}')
             pbar.update()
 
-            # TODO reload
+        # self.model.encoder_k.fc = previous_fc
+        # self.model.cuda()
+
+        # for param in self.model.encoder_k.parameters():
+            # param.requires_grad = False
+        self.lr_schedule.step()
 
     def val_one_epoch(self):
 
@@ -156,4 +157,4 @@ class DynACLTrainer():
 
         for self.epoch in range(self.start_epoch, self.param.epochs):
             self.train_one_epoch()
-            # self.val_one_epoch()
+            self.val_one_epoch()
