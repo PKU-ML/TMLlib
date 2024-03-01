@@ -1,0 +1,48 @@
+# Default parameters for DynACL
+
+# DataParam
+dataset: cifar10
+data_dir: ./data/cifar10
+batch_size: 128
+num_workers: 4
+num_classes: 10
+
+# TrainParam
+epochs: 200
+model: resnet
+seed: 2024
+save_freq: 10
+taskname: BaseAT
+resume: false
+device: cuda
+
+# OptimParam
+lr_max: 0.01
+momentum: 0.9
+weight_decay: 0.0005
+l1: 0.0
+l2: 0.0
+
+# LRScheduleParam
+lr_schedule: stage
+epoch_list: [0, 100, 150, 200]
+lr_list: [0.01, 0.001, 0.0001]
+
+# AttackParam
+attack: pgd
+epsilon: 8
+step_size: 2
+num_steps: 10
+restarts: 1
+delta_norm: l_inf
+
+# CutmixParam
+cutmix: false
+cutmix_alpha: 0
+cutmix_beta: 0
+
+# DynALCParam
+optimizer: lars
+swap_param: 0.6667
+twoLayerProj: false
+reload_frequency: 50

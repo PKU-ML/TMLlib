@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
+from torchvision import transforms
 from logging import Logger
 from tqdm import tqdm
 
@@ -157,3 +158,18 @@ class DynACLTrainer():
         for self.epoch in range(self.start_epoch, self.param.epochs):
             self.train_one_epoch()
             # self.val_one_epoch()
+            if self.epoch % self.param.reload_frequency == 1:
+                self.reload()
+
+    def reload(self):
+        strength = 1 - (self.epoch - 1) / self.param.epochs
+        self.train_dataloader.dataset.transform = transforms.Compose([
+            transforms.RandomResizedCrop(
+                96 if self.param.dataset == 'stl10' else 32, scale=(1.0 - 0.9 * strength, 1.0)),
+            # No need to decay horizontal flip
+            transforms.RandomHorizontalFlip(p=0.5),
+            transforms.RandomApply([transforms.ColorJitter(
+                0.4 * strength, 0.4 * strength, 0.4 * strength, 0.1 * strength)], p=0.8 * strength),
+            transforms.RandomGrayscale(p=0.2 * strength),
+            transforms.ToTensor(),
+        ])
