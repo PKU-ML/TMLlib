@@ -26,6 +26,7 @@ class ModelEvaler():
         saved_dict = torch.load(self.param.ckpt_file)
         self.model.load_state_dict(saved_dict['model_state_dict'])
         del saved_dict
+        self.model.cuda()
         self.attacker = AttackerPolymer(self.param.epsilon, self.param.num_steps, self.param.step_size, self.param.num_classes, self.param.device)
 
     def attack(self):
@@ -49,7 +50,7 @@ class ModelEvaler():
 
     def run(self):
 
-        result_dict = ModelEvaler.attack(self.model, self.attacker, self.val_dataloader)
+        result_dict = self.attack()
         result_json_string = json.dumps(result_dict, indent=4)
         self.logger.info(result_json_string)
         return result_dict

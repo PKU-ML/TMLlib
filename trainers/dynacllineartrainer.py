@@ -23,18 +23,19 @@ class DynACLLinearTrainer():
 
     def __init__(self, param: DynACLLinearParam,
                  train_dataloader: DataLoader,
-                 train_linear_dataloader: DataLoader,
                  val_dataloader: DataLoader,
                  logger: Logger) -> None:
 
         self.train_dataloader = train_dataloader
-        self.train_linear_dataloader = train_linear_dataloader
         self.val_dataloader = val_dataloader
         self.logger = logger
         self.param = param
 
         self.model = get_model_ssl(self.param.model, self.param.device, num_classes=param.num_classes, twoLayerProj=self.param.twoLayerProj)
         # self.model = nn.DataParallel(self.model).cuda()
+        saved_dict = torch.load(self.param.backbone_file)
+        self.model.load_state_dict(saved_dict['model_state_dict'])
+        del saved_dict
         self.previous_fc = self.model.encoder_k.fc
         self.model.encoder_k.fc = nn.Linear(self.model.encoder_k.fc.in_features, self.param.num_classes)
         self.model.cuda()
@@ -57,26 +58,27 @@ class DynACLLinearTrainer():
 
         self.epoch = self.start_epoch
         self.criterion = nn.CrossEntropyLoss()
-        self.lr_schedule = torch.optim.lr_scheduler.MultiStepLR(self.opt, milestones=[10, 20], gamma=0.1)
+        self.lr_schedule = LRSchedule(param=self.param)
+        # self.lr_schedule = torch.optim.lr_scheduler.MultiStepLR(self.opt, milestones=[60, 80], gamma=0.1)
 
     def train_one_epoch(self):
 
         train_loss = AverageMeter()
 
-        pbar = tqdm(self.train_linear_dataloader)
-
+        self.model.train()
+        pbar = tqdm(self.train_dataloader)
         for i, (X, y) in enumerate(pbar):
-
             X, y = X.cuda(), y.cuda()
+
             # lr_schedule
-            # lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_linear_dataloader))
-            # self.opt.param_groups[0].update(lr=lr)
-            self.opt.zero_grad()
+            lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
+            self.opt.param_groups[0].update(lr=lr)
 
             # train
-            output = self.model.eval()(X, 'pgd')
+            output = self.model(X, 'pgd')
             loss = self.criterion(output, y)
 
+            self.opt.zero_grad()
             loss.backward()
             self.opt.step()
 
@@ -85,13 +87,6 @@ class DynACLLinearTrainer():
 
             pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {train_loss.mean:.4f}')
             pbar.update()
-
-        # self.model.encoder_k.fc = previous_fc
-        # self.model.cuda()
-
-        # for param in self.model.encoder_k.parameters():
-            # param.requires_grad = False
-        self.lr_schedule.step()
 
     def val_one_epoch(self):
 
@@ -104,19 +99,10 @@ class DynACLLinearTrainer():
         for i, (X, y) in enumerate(self.val_dataloader):
             X, y = X.cuda(), y.cuda()
 
-            # attack
-            if self.param.attack == 'pgd':
-                delta = attack_pgd(self.model, X, y, self.param.epsilon, self.param.step_size,
-                                   self.param.num_steps, self.param.restarts, self.param.delta_norm)
-            elif self.param.attack == 'none':
-                delta = torch.zeros_like(X)
-            delta = delta.detach()
-            X_adv = normalize(torch.clamp(X + delta[:X.size(0)], min=lower_limit, max=upper_limit))
-
             # eval
-            robust_output = self.model(X_adv)
+            robust_output = self.model(X, 'pgd')
             robust_loss = self.criterion(robust_output, y)
-            output = self.model(normalize(X))
+            output = self.model(normalize(X), 'normal')
             loss = self.criterion(output, y)
 
             # log

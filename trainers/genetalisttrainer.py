@@ -9,7 +9,7 @@ import copy
 from params import GeneralistParam
 from models import get_model
 
-from utils.attack import attack_pgd
+from utils.attack import attack_pgd, AttackerPolymer
 from utils.const import *
 from utils.tens import normalize
 from utils.lr_schedule import LRSchedule
@@ -17,7 +17,6 @@ from utils.avg import AverageMeter
 from utils.mixup import *
 from utils.l1l2 import *
 from utils.ema import EMA
-from utils.avg import AverageMeter
 
 
 class GeneralistTrainer():
@@ -36,7 +35,7 @@ class GeneralistTrainer():
 
         self.model_ST = get_model(self.param.model, self.param.device, num_classes=param.num_classes)
         # self.model_ST = nn.DataParallel(self.model_ST).cuda()
-        self.opt_ST = torch.optim.SGD(self.model_ST.parameters(), lr=0.01,
+        self.opt_ST = torch.optim.SGD(self.model_ST.parameters(), lr=0.1,
                                       momentum=0.9, weight_decay=5e-4)  # TODO  add parameters about opt_ST
 
         self.best_perf = -float('inf')
@@ -63,8 +62,13 @@ class GeneralistTrainer():
         self.lr_schedule = LRSchedule(param=self.param)
         self.criterion_ST = nn.CrossEntropyLoss()
         self.beta_schedule = lambda t: np.interp(t, [0, self.param.epochs // 3, self.param.epochs * 2 // 3, self.param.epochs], [1.0, 1.0, 1.0, 0.4])
+        # self.attacker = AttackerPolymer(self.param.epsilon, self.param.num_steps, self.param.step_size, self.param.num_classes, self.param.device)
 
     def train_one_epoch(self):
+
+        self.teacher_AT.model.eval()
+        self.teacher_ST.model.eval()
+        self.teacher_mixed.model.eval()
 
         train_loss = AverageMeter("train_loss")
         train_acc = AverageMeter("train_acc")
@@ -75,8 +79,6 @@ class GeneralistTrainer():
         for i, (X, y) in enumerate(pbar):
             X, y = X.cuda(), y.cuda()
             lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
-            self.opt.param_groups[0].update(lr=lr)
-            self.opt.zero_grad()
 
             # attack
             self.model.eval()
@@ -92,6 +94,8 @@ class GeneralistTrainer():
 
             # train
             self.model.train()
+            self.opt.param_groups[0].update(lr=lr)
+            self.opt.zero_grad()
             robust_output = self.model(X_adv)
             robust_loss = self.criterion(robust_output, y)
             robust_loss += get_l1(self.param.l1, self.model)
@@ -113,6 +117,7 @@ class GeneralistTrainer():
             self.teacher_ST.update_params(self.model_ST)
             self.teacher_ST.apply_shadow()
 
+            # Mixed
             beta = self.beta_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
             self.teacher_mixed.update_params(self.teacher_AT.model, self.teacher_ST.model, beta=beta)
             self.teacher_mixed.apply_shadow()
@@ -127,7 +132,7 @@ class GeneralistTrainer():
             train_loss.update(loss_st.item(), len(y))
             train_acc.update((nat_logit.max(1)[1] == y).sum().item() / len(y), len(y))
 
-            pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {train_robust_loss.mean:.4f}|{train_loss.mean:.4f}')
+            pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {robust_loss.item():.4f}|{loss_st.item():.4f}')
             pbar.update()
 
     def val_one_epoch(self):

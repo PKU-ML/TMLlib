@@ -2,7 +2,6 @@
 import torch
 from torch.optim.optimizer import Optimizer, required
 
-# TODO 
 
 class LARS(Optimizer):
     r"""Implements layer-wise adaptive rate scaling for SGD.
@@ -103,7 +102,7 @@ class LARS(Optimizer):
                         torch.zeros_like(p.data)
                 else:
                     buf = param_state['momentum_buffer']
-                buf.mul_(momentum).add_(actual_lr, d_p + weight_decay * p.data)
+                buf.mul_(momentum).add_(d_p + weight_decay * p.data, alpha=actual_lr)
                 p.data.add_(-buf)
 
         return loss

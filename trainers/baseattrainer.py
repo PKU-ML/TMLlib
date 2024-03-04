@@ -53,6 +53,7 @@ class BaseATTrainer():
         train_robust_loss = AverageMeter("train_robust_loss")
         train_robust_acc = AverageMeter("train_robust_acc")
 
+        self.model.train()
         pbar = tqdm(self.train_dataloader)
         for i, (X, y) in enumerate(pbar):
             X, y = X.cuda(), y.cuda()
@@ -63,10 +64,8 @@ class BaseATTrainer():
             # lr_schedule
             lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
             self.opt.param_groups[0].update(lr=lr)
-            self.opt.zero_grad()
 
             # attack
-            self.model.eval()
             if self.param.attack == 'pgd':
                 if self.param.cutmix:
                     delta = attack_pgd(self.model, X, y, self.param.epsilon, self.param.step_size,
@@ -83,13 +82,14 @@ class BaseATTrainer():
             X_adv = normalize(torch.clamp(X + delta[:X.size(0)], min=lower_limit, max=upper_limit))
 
             # train
-            self.model.train()
             robust_output = self.model(X_adv)
             if self.param.cutmix:
                 robust_loss = mixup_criterion(self.criterion, robust_output, y_a, y_b, lam)
             else:
                 robust_loss = self.criterion(robust_output, y)
             robust_loss += get_l1(self.param.l1, self.model)
+
+            self.opt.zero_grad()
             robust_loss.backward()
             self.opt.step()
 

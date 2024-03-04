@@ -66,6 +66,7 @@ class ReBATTrainer():
         decay_rate = self.param.decay_rate if self.epoch >= self.param.warmup_epochs else 0.  # for WA
         boat_beta = self.param.boat_beta if self.epoch >= self.param.warmup_epochs else 0.  # force deactivating BoAT regularization before WA starts
 
+        self.model.train()
         pbar = tqdm(self.train_dataloader)
         for i, (X, y) in enumerate(pbar):
             X, y = X.cuda(), y.cuda()
@@ -76,10 +77,8 @@ class ReBATTrainer():
             # lr_schedule
             lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
             self.opt.param_groups[0].update(lr=lr)
-            self.opt.zero_grad()
 
             # attack
-            self.model.eval()
             if self.param.attack == 'pgd':
                 if not self.param.stronger_attack or self.lr_schedule.stage(self.epoch) < 1:
                     if self.param.cutmix:
@@ -105,7 +104,6 @@ class ReBATTrainer():
             X_adv = normalize(torch.clamp(X + delta[:X.size(0)], min=lower_limit, max=upper_limit))
 
             # train
-            self.model.train()
             robust_output = self.model(X_adv)
             if self.param.cutmix:
                 robust_loss = mixup_criterion(self.criterion, robust_output, y_a, y_b, lam)
@@ -124,6 +122,8 @@ class ReBATTrainer():
                     robust_loss += reg_loss * boat_beta
 
             robust_loss += get_l1(self.param.l1, self.model)
+
+            self.opt.zero_grad()
             robust_loss.backward()
             self.opt.step()
 
@@ -134,7 +134,7 @@ class ReBATTrainer():
             train_robust_acc.update((robust_output.max(1)[1] == y).sum().item() / len(y), len(y))
             train_reg_loss.update(reg_loss.item(), len(y))
 
-            pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {train_robust_loss.mean:.4f}')
+            pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {robust_loss.item():.4f}')
             pbar.update()
 
     def val_one_epoch(self):

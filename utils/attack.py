@@ -8,7 +8,10 @@ from .mixup import *
 from .tens import *
 from .misc import torch_accuracy
 from .loss import nt_xent
-# from autoattack import AutoAttack
+try:
+    from autoattack import AutoAttack
+except:
+    pass
 
 
 def attack_pgd(model, X, y, epsilon, alpha, attack_iters, restarts,
@@ -213,7 +216,7 @@ class AttackerPolymer:
         x_adv = Variable(img.data, requires_grad=True)
         random_noise = torch.FloatTensor(*x_adv.shape).uniform_(-self.epsilon, self.epsilon).to(self.device)
         x_adv = Variable(x_adv.data + random_noise, requires_grad=True)
-        onehot_targets = torch.eye(self.num_classes)[gt].to(self.device)
+        onehot_targets = torch.eye(self.num_classes, device=self.device)[gt].to(self.device)
 
         for _ in range(self.num_steps):
             opt = optim.SGD([x_adv], lr=1e-3)
@@ -241,7 +244,11 @@ class AttackerPolymer:
         return x_adv
 
     def AA(self, model, img, gt, attacks_to_run=None, return_acc=False):
-        adversary = AutoAttack(model, norm='Linf', eps=self.epsilon, version='standard', verbose=False)
+        try:
+            adversary = AutoAttack(model, norm='Linf', eps=self.epsilon, version='standard', verbose=False)
+        except:
+            return torch.tensor([0.0])
+
         if attacks_to_run:
             adversary.attacks_to_run = attacks_to_run
             x_adv = adversary.run_standard_evaluation_individual(img, gt, bs=len(img))[attacks_to_run[0]]

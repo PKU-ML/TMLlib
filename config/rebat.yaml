@@ -17,7 +17,7 @@ resume: false
 device: cuda
 
 # OptimParam
-lr_max: 0.01
+lr_max: 0.1
 weight_decay: 0.0005
 momentum: 0.9
 l1: 0.0
@@ -26,7 +26,7 @@ l2: 0.0
 # LRScheduleParam
 lr_schedule: stage
 epoch_list: [0, 100, 150, 200]
-lr_list: [0.01, 0.00666, 0.00444]
+lr_list: [0.1, 0.0666, 0.0444]
 
 # AttackParam
 attack: pgd

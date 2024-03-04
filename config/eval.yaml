@@ -18,6 +18,6 @@ delta_norm: l_inf
 # EvalParam
 model: resnet
 seed: 2024
-taskname: BaseAT
+taskname: Generalist
 device: cuda
-ckptname: last.ckpt
+ckptname: last_ckpt.pth

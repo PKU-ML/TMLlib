@@ -57,7 +57,7 @@ class DynACLTrainer():
         self.criterion = nn.CrossEntropyLoss()
         self.lr_schedule = LRSchedule(param=self.param)
 
-    def train_encoder_one_epoch(self):
+    def train_one_epoch(self):
 
         train_loss = AverageMeter("train_robust_loss")
 
@@ -69,10 +69,9 @@ class DynACLTrainer():
             # lr_schedule
             lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
             self.opt.param_groups[0].update(lr=lr)
-            self.opt.zero_grad()
 
             # attack
-            X_adv = PGD_contrastive(self.model.eval(), X, self.param.epsilon, self.param.step_size, self.param.num_steps)
+            X_adv = PGD_contrastive(self.model, X, self.param.epsilon, self.param.step_size, self.param.num_steps)
             features_adv = self.model.train()(X_adv, 'pgd', swap=True)
             features = self.model.train()(X, 'normal', swap=True)
             self.model._momentum_update_encoder_k()
@@ -82,6 +81,7 @@ class DynACLTrainer():
 
             loss = (nt_xent(features) * (2 - weight_adv) + nt_xent(features_adv) * weight_adv) / 2
 
+            self.opt.zero_grad()
             loss.backward()
             self.opt.step()
 
@@ -91,10 +91,8 @@ class DynACLTrainer():
             pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {train_loss.mean:.4f}')
             pbar.update()
 
-            # TODO reload
-
     def val_one_epoch(self):
-
+        '''
         val_loss = AverageMeter("val_loss")
         val_acc = AverageMeter("val_acc")
         val_robust_loss = AverageMeter("val_robust_loss")
@@ -131,6 +129,7 @@ class DynACLTrainer():
                          val_loss.mean, val_acc.mean, val_robust_loss.mean, val_robust_acc.mean)
 
         self.current_perf = val_robust_acc.mean
+        '''
 
         saved_dict = {
             'model_state_dict': self.model.state_dict(),
@@ -155,14 +154,15 @@ class DynACLTrainer():
 
     def run(self):
 
+        self.reload()
         for self.epoch in range(self.start_epoch, self.param.epochs):
-            self.train_one_epoch()
-            # self.val_one_epoch()
-            if self.epoch % self.param.reload_frequency == 1:
+            if self.epoch % self.param.reload_frequency == 0:
                 self.reload()
+            self.train_one_epoch()
+            self.val_one_epoch()
 
     def reload(self):
-        strength = 1 - (self.epoch - 1) / self.param.epochs
+        strength = 1 - self.epoch / self.param.epochs
         self.train_dataloader.dataset.transform = transforms.Compose([
             transforms.RandomResizedCrop(
                 96 if self.param.dataset == 'stl10' else 32, scale=(1.0 - 0.9 * strength, 1.0)),
@@ -173,3 +173,4 @@ class DynACLTrainer():
             transforms.RandomGrayscale(p=0.2 * strength),
             transforms.ToTensor(),
         ])
+        # TODO is this OK?

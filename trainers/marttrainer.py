@@ -54,12 +54,12 @@ class MARTTrainer():
         # TODO BUG: Output NaN result
         train_loss = AverageMeter("train_loss")
 
+        self.model.train()
         pbar = tqdm(self.train_dataloader)
         for i, (X, y) in enumerate(pbar):
             X, y = X.cuda(), y.cuda()
             lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
             self.opt.param_groups[0].update(lr=lr)
-            self.opt.zero_grad()
 
             # calculate robust loss
             loss = mart_loss(model=self.model,
@@ -70,13 +70,15 @@ class MARTTrainer():
                              epsilon=self.param.epsilon,
                              perturb_steps=self.param.num_steps,
                              beta=self.param.mart_beta)
+
+            self.opt.zero_grad()
             loss.backward()
             self.opt.step()
 
             # log
             train_loss.update(loss.item(), len(y))
 
-            pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {train_loss.mean:.4f}')
+            pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {loss.item():.4f}')
             pbar.update()
 
     def val_one_epoch(self):

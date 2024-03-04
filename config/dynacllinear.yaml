@@ -8,11 +8,11 @@ num_workers: 4
 num_classes: 10
 
 # TrainParam
-epochs: 200
+epochs: 100
 model: resnet
 seed: 2024
 save_freq: 10
-taskname: BaseAT
+taskname: DynACLLinear
 resume: false
 device: cuda
 
@@ -25,7 +25,7 @@ l2: 0.0
 
 # LRScheduleParam
 lr_schedule: stage
-epoch_list: [0, 100, 150, 200]
+epoch_list: [0, 60, 80, 100]
 lr_list: [0.01, 0.001, 0.0001]
 
 # AttackParam
@@ -44,3 +44,4 @@ cutmix_beta: 0
 # DynACLLinearParam
 swap_param: 0.6667
 twoLayerProj: false
+backbone_file: save_file/DynACL/last_ckpt.pth

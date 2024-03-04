@@ -28,17 +28,6 @@ class LRSchedule():
             self.epoch_list = epoch_list[:]
             self.lr_list = lr_list[:]
 
-        if len(self.epoch_list) == 0:
-            self.epoch_list = [0]
-        if len(self.lr_list) == 0:
-            self.lr_list = [self.lr_max]
-        if self.epoch_list[0] != 0:
-            self.epoch_list = [0] + self.epoch_list
-        if self.epoch_list[-1] != self.epochs:
-            self.epoch_list = self.epoch_list + [self.epochs]
-        for num1, num2 in zip(self.epoch_list[1:], self.epoch_list[:-1]):
-            assert (num1 > num2)
-
         if self.lr_schedule == "const":
 
             def lr_schedule_fn(t):
@@ -46,6 +35,16 @@ class LRSchedule():
 
         elif self.lr_schedule == "stage":
 
+            if len(self.epoch_list) == 0:
+                self.epoch_list = [0]
+            if len(self.lr_list) == 0:
+                self.lr_list = [self.lr_max]
+            if self.epoch_list[0] != 0:
+                self.epoch_list = [0] + self.epoch_list
+            if self.epoch_list[-1] != self.epochs:
+                self.epoch_list = self.epoch_list + [self.epochs]
+            for num1, num2 in zip(self.epoch_list[1:], self.epoch_list[:-1]):
+                assert (num1 > num2)
             assert (len(self.epoch_list) == len(self.lr_list) + 1)
 
             def lr_schedule_fn(t):
@@ -54,6 +53,16 @@ class LRSchedule():
 
         elif self.lr_schedule == "linear":
 
+            if len(self.epoch_list) == 0:
+                self.epoch_list = [0]
+            if len(self.lr_list) == 0:
+                self.lr_list = [self.lr_max]
+            if self.epoch_list[0] != 0:
+                self.epoch_list = [0] + self.epoch_list
+            if self.epoch_list[-1] != self.epochs:
+                self.epoch_list = self.epoch_list + [self.epochs]
+            for num1, num2 in zip(self.epoch_list[1:], self.epoch_list[:-1]):
+                assert (num1 > num2)
             assert (len(self.epoch_list) == len(self.lr_list))
 
             def lr_schedule_fn(t):
@@ -61,8 +70,17 @@ class LRSchedule():
 
         elif self.lr_schedule == "cosine":
 
+            assert len(self.epoch_list) == 1
+            assert self.epoch_list[0] >= 0
+
             def lr_schedule_fn(t):
-                return self.lr_max * 0.5 * (1 + math.cos(t / self.epochs * math.pi))
+                if t < self.epoch_list[0]:
+                    factor = (t + 0.5) / self.epoch_list[0]
+                    lr = self.lr_max * factor
+                else:
+                    factor = (t - self.epoch_list[0]) / (self.epochs - self.epoch_list[0])
+                    lr = 1e-6 + (self.lr_max - 1e-6) * 0.5 * (1 + math.cos(factor * math.pi))
+                return lr
 
         else:
 

@@ -23,9 +23,9 @@ def main():
 
     logger.info(args)
 
-    train_dataloader, train_linear_dataloader, test_dataloader = prepare_ssldataloader(param)
+    _, train_dataloader, test_dataloader = prepare_ssldataloader(param)
 
-    trainer = DynACLLinearTrainer(param, train_dataloader, train_linear_dataloader, test_dataloader, logger)
+    trainer = DynACLLinearTrainer(param, train_dataloader, test_dataloader, logger)
 
     trainer.run()
 

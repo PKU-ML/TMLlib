@@ -63,6 +63,7 @@ class AWPTrainer():
         train_robust_loss = AverageMeter("train_robust_loss")
         train_robust_acc = AverageMeter("train_robust_acc")
 
+        self.model.train()
         pbar = tqdm(self.train_dataloader)
         for i, (X, y) in enumerate(pbar):
             X, y = X.cuda(), y.cuda()
@@ -73,10 +74,8 @@ class AWPTrainer():
             # lr_schedule
             lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
             self.opt.param_groups[0].update(lr=lr)
-            self.opt.zero_grad()
 
             # attack
-            self.model.eval()
             if self.param.attack == 'pgd':
                 if self.param.cutmix:
                     delta = attack_pgd(self.model, X, y, self.param.epsilon, self.param.step_size,
@@ -93,14 +92,12 @@ class AWPTrainer():
             X_adv = normalize(torch.clamp(X + delta[:X.size(0)], min=lower_limit, max=upper_limit))
 
             # train
-            self.model.train()
             ####################################
             # calculate adversarial weight perturbation and perturb it
             if self.epoch >= self.param.awp_warmup:
                 # not compatible to mixup currently.
                 assert (not self.param.cutmix)
-                awp = self.awp_adversary.calc_awp(inputs_adv=X_adv,
-                                                  targets=y)
+                awp = self.awp_adversary.calc_awp(inputs_adv=X_adv, targets=y)
                 self.awp_adversary.perturb(awp)
             ####################################
             robust_output = self.model(X_adv)
@@ -109,6 +106,8 @@ class AWPTrainer():
             else:
                 robust_loss = self.criterion(robust_output, y)
             robust_loss += get_l1(self.param.l1, self.model)
+
+            self.opt.zero_grad()
             robust_loss.backward()
             self.opt.step()
 
@@ -121,7 +120,7 @@ class AWPTrainer():
             train_robust_loss.update(robust_loss.item(), len(y))
             train_robust_acc.update((robust_output.max(1)[1] == y).sum().item() / len(y), len(y))
 
-            pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {train_robust_loss.mean:.4f}')
+            pbar.set_description(f'Epoch {self.epoch + 1}/{self.param.epochs}, Loss: {robust_loss.item():.4f}')
             pbar.update()
 
     def val_one_epoch(self):
