@@ -49,6 +49,7 @@ class LRSchedule():
 
             def lr_schedule_fn(t):
                 stage = sum([int(epoch <= t) for epoch in self.epoch_list]) - 1
+                stage = min(max(0, stage), len(self.lr_list) - 1)
                 return float(self.lr_list[stage])
 
         elif self.lr_schedule == "linear":

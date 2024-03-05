@@ -159,8 +159,11 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-
 .vscode
 playground
 save_file
 data
+auto-attack-master.zip
+auto-attack-master
+auto-attack
+log

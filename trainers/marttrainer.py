@@ -59,7 +59,10 @@ class MARTTrainer():
         for i, (X, y) in enumerate(pbar):
             X, y = X.cuda(), y.cuda()
             lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
-            self.opt.param_groups[0].update(lr=lr)
+            for param_group in self.opt.param_groups:
+                param_group['lr'] = lr
+            # self.opt.param_groups[0].update(lr=lr)
+            self.opt.zero_grad()
 
             # calculate robust loss
             loss = mart_loss(model=self.model,
@@ -71,7 +74,6 @@ class MARTTrainer():
                              perturb_steps=self.param.num_steps,
                              beta=self.param.mart_beta)
 
-            self.opt.zero_grad()
             loss.backward()
             self.opt.step()
 
