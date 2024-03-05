@@ -31,7 +31,7 @@ def prepare_dataloader(param: DataParam) -> Tuple[DataLoader, DataLoader]:
 
     test_dataset: Dataset = DATASET_CLASS(root=param.data_dir, train=False, download=True, transform=transform_test)
 
-    train_dataloader: DataLoader = DataLoader(train_dataset, batch_size=param.batch_size, shuffle=False, num_workers=param.num_workers)
+    train_dataloader: DataLoader = DataLoader(train_dataset, batch_size=param.batch_size, shuffle=True, num_workers=param.num_workers)
 
     test_dataloader: DataLoader = DataLoader(test_dataset, batch_size=param.batch_size, shuffle=False, num_workers=param.num_workers)
 

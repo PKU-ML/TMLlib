@@ -15,7 +15,7 @@ from utils.lr_schedule import LRSchedule
 from utils.avg import AverageMeter
 from utils.mixup import *
 from utils.l1l2 import *
-from utils.loss import mart_loss
+from utils.loss import MARTLoss
 
 
 class MARTTrainer():
@@ -46,34 +46,40 @@ class MARTTrainer():
             del saved_dict
 
         self.epoch = self.start_epoch
+        self.mart_loss = MARTLoss(self.param.mart_beta)
         self.criterion = nn.CrossEntropyLoss()
         self.lr_schedule = LRSchedule(param=self.param)
 
     def train_one_epoch(self):
 
-        # TODO BUG: Output NaN result
         train_loss = AverageMeter("train_loss")
 
         self.model.train()
         pbar = tqdm(self.train_dataloader)
         for i, (X, y) in enumerate(pbar):
             X, y = X.cuda(), y.cuda()
+
+            # lr_schedule
             lr = self.lr_schedule(self.epoch + (i + 1) / len(self.train_dataloader))
-            for param_group in self.opt.param_groups:
-                param_group['lr'] = lr
-            # self.opt.param_groups[0].update(lr=lr)
-            self.opt.zero_grad()
+            self.opt.param_groups[0].update(lr=lr)
+
+            # attack
+            self.model.eval()
+            if self.param.attack == 'pgd':
+                delta = attack_pgd(self.model, X, y, self.param.epsilon, self.param.step_size,
+                                   self.param.num_steps, self.param.restarts, self.param.delta_norm)
+            elif self.param.attack == 'none':
+                delta = torch.zeros_like(X)
+            else:
+                ValueError("Error attack type")
+            delta = delta.detach()
+            X_adv = normalize(torch.clamp(X + delta[:X.size(0)], min=lower_limit, max=upper_limit))
 
             # calculate robust loss
-            loss = mart_loss(model=self.model,
-                             x_natural=X,
-                             y=y,
-                             optimizer=self.opt,
-                             step_size=self.param.step_size,
-                             epsilon=self.param.epsilon,
-                             perturb_steps=self.param.num_steps,
-                             beta=self.param.mart_beta)
+            self.model.train()
+            loss = self.mart_loss(self.model, normalize(X), X_adv, y)
 
+            self.opt.zero_grad()
             loss.backward()
             self.opt.step()
 
