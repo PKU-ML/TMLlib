@@ -9,9 +9,8 @@ from tqdm import tqdm
 from params import DynACLParam
 from models.sslmodels import get_model_ssl
 
-from utils.attack import attack_pgd, PGD_contrastive
+from utils.attack import PGD_contrastive
 from utils.const import *
-from utils.tens import normalize
 from utils.lr_schedule import LRSchedule
 from utils.avg import AverageMeter
 from utils.mixup import *

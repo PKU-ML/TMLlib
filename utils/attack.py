@@ -93,6 +93,43 @@ def PGD_contrastive(model, inputs, eps=8. / 255., alpha=2. / 255., iters=10):
     return (inputs + delta).detach()
 
 
+def pgd_attack_for_ssl_linear(model, images, labels, device, eps=8. / 255., alpha=2. / 255., iters=20, advFlag=None, forceEval=True, randomInit=True):
+    # images = images.to(device)
+    # labels = labels.to(device)
+    loss = nn.CrossEntropyLoss()
+
+    # init
+    if randomInit:
+        delta = torch.rand_like(images) * eps * 2 - eps
+    else:
+        delta = torch.zeros_like(images)
+    delta = torch.nn.Parameter(delta, requires_grad=True)
+
+    for i in range(iters):
+        if advFlag is None:
+            if forceEval:
+                model.eval()
+            outputs = model(images + delta)
+        else:
+            if forceEval:
+                model.eval()
+            outputs = model(images + delta, advFlag)
+
+        model.zero_grad()
+        cost = loss(outputs, labels)
+        # cost.backward()
+        delta_grad = torch.autograd.grad(cost, [delta])[0]
+
+        delta.data = delta.data + alpha * delta_grad.sign()
+        delta.grad = None
+        delta.data = torch.clamp(delta.data, min=-eps, max=eps)
+        delta.data = torch.clamp(images + delta.data, min=0, max=1) - images
+
+    model.zero_grad()
+
+    return (images + delta).detach().data
+
+
 class AttackerPolymer:
 
     def __init__(self, epsilon, num_steps, step_size, num_classes, device):

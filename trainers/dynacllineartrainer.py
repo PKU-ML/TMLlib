@@ -8,15 +8,9 @@ from tqdm import tqdm
 from params import DynACLLinearParam
 from models.sslmodels import get_model_ssl
 
-from utils.attack import attack_pgd, PGD_contrastive
-from utils.const import *
-from utils.tens import normalize
+from utils.attack import pgd_attack_for_ssl_linear as attack_pgd
 from utils.lr_schedule import LRSchedule
 from utils.avg import AverageMeter
-from utils.mixup import *
-from utils.l1l2 import *
-from utils.lars import LARS
-from utils.loss import nt_xent
 
 
 class DynACLLinearTrainer():
@@ -75,7 +69,7 @@ class DynACLLinearTrainer():
             self.opt.param_groups[0].update(lr=lr)
 
             # train
-            output = self.model(X, 'pgd')
+            output = self.model.eval()(X, 'pgd')
             loss = self.criterion(output, y)
 
             self.opt.zero_grad()
@@ -99,11 +93,15 @@ class DynACLLinearTrainer():
         for i, (X, y) in enumerate(self.val_dataloader):
             X, y = X.cuda(), y.cuda()
 
+            X_adv = attack_pgd(self.model, X, y, self.param.device,
+                               self.param.epsilon, self.param.step_size, self.param.num_steps, 'pgd')
+
             # eval
-            robust_output = self.model(X, 'pgd')
-            robust_loss = self.criterion(robust_output, y)
-            output = self.model(normalize(X), 'normal')
-            loss = self.criterion(output, y)
+            with torch.no_grad():
+                robust_output = self.model.eval()(X_adv, 'pgd')
+                robust_loss = self.criterion(robust_output, y)
+                output = self.model.eval()(X, 'normal')
+                loss = self.criterion(output, y)
 
             # log
             val_robust_loss.update(robust_loss.item(), len(y))

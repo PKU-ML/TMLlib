@@ -19,7 +19,7 @@ device: cuda
 # OptimParam
 lr_max: 0.01
 momentum: 0.9
-weight_decay: 0.0005
+weight_decay: 0.0002
 l1: 0.0
 l2: 0.0
 

@@ -18,7 +18,7 @@ def get_model_ssl(model_name, device, num_classes: int = 10, twoLayerProj: bool 
     else:
         raise ValueError("Not suppoted model name")
 
-    model = BACKBONE(pretrained=False, bn_names=bn_names, num_classes=num_classes)
+    model = BACKBONE(pretrained=False, bn_names=bn_names)
     ch = model.encoder_k.fc.in_features
     model.encoder_q.fc = PROJHEAD(ch, bn_names=bn_names, twoLayerProj=twoLayerProj)
     model.encoder_k.fc = PROJHEAD(ch, bn_names=bn_names, twoLayerProj=twoLayerProj)
