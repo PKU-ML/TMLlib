@@ -13,6 +13,7 @@ from models import get_model
 from utils.const import *
 from utils.avg import AverageMeter
 from utils.attack import AttackerPolymer
+from utils.sgm import register_hook_for_resnet
 
 
 class ModelEvaler():
@@ -28,6 +29,8 @@ class ModelEvaler():
         del saved_dict
         self.model.cuda()
         self.attacker = AttackerPolymer(self.param.epsilon, self.param.num_steps, self.param.step_size, self.param.num_classes, self.param.device)
+        if self.param.use_sgm:
+            register_hook_for_resnet(self.model, self.param.model, 0.5)
 
     def attack(self):
 

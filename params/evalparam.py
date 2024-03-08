@@ -17,6 +17,7 @@ class EvalParam(DataParam, AttackParam):
         parser.add_argument("--taskname", type=str)
         parser.add_argument("--ckptname", type=str)
         parser.add_argument("--device", type=str)
+        parser.add_argument("--use_sgm", type=bool)
 
     def __init__(self, args: Namespace) -> None:
         DataParam.__init__(self, args)
@@ -26,6 +27,7 @@ class EvalParam(DataParam, AttackParam):
         self.taskname: Path = Path(args.taskname)
         self.ckptname: Path = Path(args.ckptname)
         self.device: str = str(args.device)
+        self.use_sgm: bool = bool(args.use_sgm)
 
         self.save_dir = Path("save_file") / self.taskname
         self.log_file = self.save_dir / 'eval.log'

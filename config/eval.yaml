@@ -21,3 +21,4 @@ seed: 2024
 taskname: Generalist
 device: cuda
 ckptname: last_ckpt.pth
+use_sgm: False

@@ -3,7 +3,7 @@
 # DataParam
 dataset: cifar10
 data_dir: ./data/cifar10
-batch_size: 128
+batch_size: 512
 num_workers: 4
 num_classes: 10
 
