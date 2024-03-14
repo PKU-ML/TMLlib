@@ -14,6 +14,7 @@ from utils.const import *
 from utils.avg import AverageMeter
 from utils.attack import AttackerPolymer
 from utils.sgm import register_hook_for_resnet
+from utils.norm_model import NormalModel
 
 
 class ModelEvaler():
@@ -27,10 +28,11 @@ class ModelEvaler():
         saved_dict = torch.load(self.param.ckpt_file)
         self.model.load_state_dict(saved_dict['model_state_dict'])
         del saved_dict
-        self.model.cuda()
-        self.attacker = AttackerPolymer(self.param.epsilon, self.param.num_steps, self.param.step_size, self.param.num_classes, self.param.device)
         if self.param.use_sgm:
             register_hook_for_resnet(self.model, self.param.model, 0.5)
+        self.model = NormalModel(self.model)
+        self.model.cuda()
+        self.attacker = AttackerPolymer(self.param.epsilon, self.param.num_steps, self.param.step_size, self.param.num_classes, self.param.device)
 
     def attack(self):
 
