@@ -4,7 +4,7 @@ from .marttrainer import MARTTrainer
 from .awptrainer import AWPTrainer
 from .dynacltrainer import DynACLTrainer
 from .dynacllineartrainer import DynACLLinearTrainer
-from .genetalisttrainer import GeneralistTrainer
+from .generalisttrainer import GeneralistTrainer
 from .rebattrainer import ReBATTrainer
 
 from .modelevaler import ModelEvaler
