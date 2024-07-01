@@ -97,3 +97,9 @@ Citation
 }
 ```
 
+# Evaluate
+To evaluate the accuracy/robustness of pre-trained model
+```
+  python main_eval.py --yaml config/eval.yaml 
+```
+Parameters are given in ```config/eval.yaml```.
