@@ -18,6 +18,7 @@ The environment in which we build this repo is given in ```requirements.txt```. 
 - [AWP](https://arxiv.org/abs/2004.05884)
 - [Generalist](https://arxiv.org/abs/2303.13813)
 - [DynACL](https://arxiv.org/abs/2303.01289)
+- [ReBAT](https://arxiv.org/abs/2310.19360)
 
 # Implemented Methods & Usage
 ### 1. [Valina Adversarial Training](https://arxiv.org/abs/1706.06083)
@@ -60,6 +61,12 @@ To start the code
 ```
 Parameters are given in ```config/dynacl.yaml```.
 
+### 6. Balance, Imbalance, and Rebalance: Understanding Robust Overfitting from a Minimax Game Perspective ([ReBAT](https://arxiv.org/abs/2310.19360))
+To start the code
+```sh
+  python main_rebat.py --yaml config/rebat.yaml 
+```
+Parameters are given in ```config/rebat.yaml```.
 
 # Evaluate
 To evaluate the accuracy/robustness of pre-trained model
